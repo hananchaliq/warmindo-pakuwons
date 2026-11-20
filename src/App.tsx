@@ -1,18 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from 'react';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import {
   ArrowRight,
+  ArrowUp,
   Clock,
-  Coffee,
+  ExternalLink,
   Flame,
+  LayoutGrid,
+  List,
   MapPin,
   MessageCircle,
+  RotateCcw,
   Search,
   ShoppingBag,
   SlidersHorizontal,
-  Soup,
-  UtensilsCrossed,
-  X,
+  Sparkles,
+  Utensils,
 } from 'lucide-react';
 import {
   CATEGORY_TABS,
@@ -40,24 +51,72 @@ import {
   type CartItem,
   type CheckoutFormState,
 } from './utils/orderLogic';
-import { HeroEmberCanvas } from './three/HeroEmberCanvas';
-import { CulinaryShowcase3D, type DishModelId } from './three/CulinaryShowcase3D';
+import {
+  attachGlobalSpotlightTracker,
+  toggleThemeWithReveal,
+  type ThemeMode,
+} from './utils/motionCraft';
 import { Navbar } from './components/Navbar';
+import {
+  BrandEmblem,
+  FLUID_EASE,
+  MagneticWrap,
+  MaskedLine,
+  ParallaxFrame,
+  RevealBlock,
+  ScrollProgressLine,
+  SPRING_POP_EASE,
+} from './components/MotionPrimitives';
+import { SlidingPillNav, type PillNavItem } from './components/SlidingPillNav';
+import { AnimatedNumber } from './components/AnimatedNumber';
 import { ProductCard } from './components/ProductCard';
 import { ProductModal } from './components/ProductModal';
 import { CartDrawer } from './components/CartDrawer';
-import {
-  BrandEmblem,
-  GoldLeafOrnament,
-  LUXURY_EASE,
-  RevealBlock,
-  ScrollProgressLine,
-} from './components/MotionPrimitives';
+import { HeroEmberCanvas } from './three/HeroEmberCanvas';
+import { CulinaryShowcase3D, type DishModelId } from './three/CulinaryShowcase3D';
 
 const CART_STORAGE_KEY = 'warmindo_pakuwons_cart_v1';
+const THEME_STORAGE_KEY = 'warmindo_pakuwons_theme_v2';
+
+type CatalogViewMode = 'grid' | 'list';
+
+interface ToastState {
+  id: number;
+  message: string;
+  undoSnapshot?: CartItem[];
+}
+
+const DISH_CRAFT_METRICS: Record<
+  DishModelId,
+  { label: string; score: number }[]
+> = {
+  nyemek: [
+    { label: 'Kedalaman Rempah', score: 94 },
+    { label: 'Aroma Wajan', score: 88 },
+    { label: 'Tingkat Kehangatan', score: 96 },
+  ],
+  magelangan: [
+    { label: 'Aroma Smokey Wok', score: 97 },
+    { label: 'Kepadatan Porsi', score: 95 },
+    { label: 'Tekstur Renyah', score: 89 },
+  ],
+  kopi: [
+    { label: 'Keseimbangan Aren', score: 93 },
+    { label: 'Intensitas Kopi', score: 86 },
+    { label: 'Kesegaran Dingin', score: 98 },
+  ],
+};
+
+const MARQUEE_PHRASES = [
+  'Indomie Nyemek Wajan Besi',
+  'Magelangan Smokey Pakuwon',
+  'Es Kopi Susu Gula Aren',
+  'Pesan Instan Chat WhatsApp',
+  'Buka 16.00 – 03.00 WIB',
+  'Depok · Sleman · Yogyakarta',
+];
 
 function loadInitialCart(): CartItem[] {
-  if (typeof window === 'undefined') return [];
   try {
     const raw = window.localStorage.getItem(CART_STORAGE_KEY);
     if (!raw) return [];
@@ -68,23 +127,44 @@ function loadInitialCart(): CartItem[] {
   }
 }
 
+function loadInitialTheme(): ThemeMode {
+  try {
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {
+    // ignore storage restriction
+  }
+  return 'dark';
+}
+
 export default function App() {
+  const [theme, setTheme] = useState<ThemeMode>(loadInitialTheme);
   const [cart, setCart] = useState<CartItem[]>(loadInitialCart);
   const [cartOpen, setCartOpen] = useState(false);
   const [customizingProduct, setCustomizingProduct] = useState<Product | null>(null);
 
-  // Filter & Hero quick-order state
-  const [activeCategory, setActiveCategory] = useState<ProductCategory>('all');
+  // Category & View-mode Blur-Out -> Staggered Blur-In morph states
+  const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('all');
+  const [displayedCategory, setDisplayedCategory] = useState<ProductCategory>('all');
+  const [viewMode, setViewMode] = useState<CatalogViewMode>('grid');
+  const [displayedViewMode, setDisplayedViewMode] = useState<CatalogViewMode>('grid');
+  const [isMorphing, setIsMorphing] = useState(false);
+  const [morphKey, setMorphKey] = useState(0);
+  const morphTimerRef = useRef<number>(0);
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [preferredSpice, setPreferredSpice] = useState<SpiceLevel>('Sedang');
-  const [heroCategory, setHeroCategory] = useState<ProductCategory>('all');
-  const [heroSpice, setHeroSpice] = useState<SpiceLevel>('Sedang');
-  const [heroMethod, setHeroMethod] = useState<OrderMethod>('Makan di Tempat');
+  const [activeDishId, setActiveDishId] = useState<DishModelId>('nyemek');
+  const [heroShowcaseIndex, setHeroShowcaseIndex] = useState(0);
+  const [defaultSpice, setDefaultSpice] = useState<SpiceLevel>('Sedang');
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const toastTimerRef = useRef<number>(0);
 
-  // 3D Culinary Showcase state
-  const [active3dDish, setActive3dDish] = useState<DishModelId>('nyemek');
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // Checkout form state
+  // Viewport-triggered Craft Story SVG curve & KPI count-up
+  const craftRef = useRef<HTMLDivElement | null>(null);
+  const [craftVisible, setCraftVisible] = useState(false);
+
   const [checkoutForm, setCheckoutForm] = useState<CheckoutFormState>({
     customerName: '',
     orderMethod: 'Makan di Tempat',
@@ -94,29 +174,187 @@ export default function App() {
     whatsappTarget: STORE_INFO.defaultWhatsapp,
   });
 
-  // Subtle non-blocking feedback banner when adding items
-  const [addedBanner, setAddedBanner] = useState<string | null>(null);
+  // Sync Tailwind v4 class-based dark mode on <html>
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [theme]);
 
+  // Global spotlight & 3D tilt pointer tracking
+  useEffect(() => {
+    return attachGlobalSpotlightTracker();
+  }, []);
+
+  // Back-to-top visibility listener
+  useEffect(() => {
+    const onScroll = () => setShowBackToTop(window.scrollY > 560);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Observe Craft Story bento for SVG draw-in & animated numbers
+  useEffect(() => {
+    const el = craftRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setCraftVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setCraftVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.15 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Persist cart
   useEffect(() => {
     try {
       window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
     } catch {
-      // Ignore storage quota issues
+      // ignore storage quota errors
     }
   }, [cart]);
 
+  // Clean up timers on unmount
   useEffect(() => {
-    if (!addedBanner) return;
-    const timer = window.setTimeout(() => setAddedBanner(null), 2600);
-    return () => window.clearTimeout(timer);
-  }, [addedBanner]);
+    return () => {
+      if (morphTimerRef.current) window.clearTimeout(morphTimerRef.current);
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  const handleToggleTheme = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    const nextTheme: ThemeMode = theme === 'dark' ? 'light' : 'dark';
+    toggleThemeWithReveal(event, () => {
+      document.documentElement.classList.toggle('dark', nextTheme === 'dark');
+      setTheme(nextTheme);
+    });
+  }, [theme]);
+
+  const triggerCatalogMorph = useCallback(
+    (nextCat: ProductCategory, nextView: CatalogViewMode) => {
+      setSelectedCategory(nextCat);
+      setViewMode(nextView);
+      setIsMorphing(true);
+      if (morphTimerRef.current) window.clearTimeout(morphTimerRef.current);
+      morphTimerRef.current = window.setTimeout(() => {
+        setDisplayedCategory(nextCat);
+        setDisplayedViewMode(nextView);
+        setMorphKey((k) => k + 1);
+        setIsMorphing(false);
+      }, 210);
+    },
+    [],
+  );
+
+  const handleSelectCategory = useCallback(
+    (nextCategory: ProductCategory) => {
+      if (nextCategory === selectedCategory) return;
+      triggerCatalogMorph(nextCategory, viewMode);
+    },
+    [selectedCategory, viewMode, triggerCatalogMorph],
+  );
+
+  const handleSelectViewMode = useCallback(
+    (nextView: CatalogViewMode) => {
+      if (nextView === viewMode) return;
+      triggerCatalogMorph(selectedCategory, nextView);
+    },
+    [selectedCategory, viewMode, triggerCatalogMorph],
+  );
+
+  const showToast = useCallback((message: string, undoSnapshot?: CartItem[]) => {
+    setToast({ id: Date.now(), message, undoSnapshot });
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+    }, 3800);
+  }, []);
+
+  const handleUndoToast = useCallback(() => {
+    if (!toast?.undoSnapshot) return;
+    setCart(toast.undoSnapshot);
+    setToast(null);
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+  }, [toast]);
+
+  const handleQuickAdd = useCallback(
+    (product: Product) => {
+      setCart((prev) => {
+        const snapshot = prev;
+        showToast(`${product.name} masuk keranjang`, snapshot);
+        return addOrMergeCartItem(prev, {
+          product,
+          spiceLevel: product.supportsSpice ? defaultSpice : undefined,
+          toppings: [],
+          note: '',
+          quantity: 1,
+        });
+      });
+    },
+    [defaultSpice, showToast],
+  );
+
+  const handleConfirmCustomAdd = useCallback(
+    (payload: {
+      product: Product;
+      spiceLevel?: SpiceLevel;
+      toppings: ToppingOption[];
+      note: string;
+      quantity: number;
+    }) => {
+      setCart((prev) => {
+        const snapshot = prev;
+        showToast(`${payload.quantity}x ${payload.product.name} ditambahkan`, snapshot);
+        return addOrMergeCartItem(prev, payload);
+      });
+    },
+    [showToast],
+  );
+
+  const handleUpdateQty = useCallback((cartKey: string, delta: number) => {
+    setCart((prev) => updateCartItemQuantity(prev, cartKey, delta));
+  }, []);
+
+  const handleRemoveItem = useCallback(
+    (cartKey: string) => {
+      setCart((prev) => {
+        const removed = prev.find((i) => i.cartKey === cartKey);
+        if (removed) {
+          showToast(`${removed.name} dihapus`, prev);
+        }
+        return removeCartItem(prev, cartKey);
+      });
+    },
+    [showToast],
+  );
+
+  const handleClearCart = useCallback(() => {
+    setCart((prev) => {
+      if (prev.length > 0) {
+        showToast('Keranjang dikosongkan', prev);
+      }
+      return [];
+    });
+  }, [showToast]);
 
   const { totalItems, subtotal } = useMemo(() => computeCartTotals(cart), [cart]);
 
-  const quantityByProductId = useMemo(() => {
+  const cartQtyByProduct = useMemo(() => {
     const map: Record<string, number> = {};
     for (const item of cart) {
-      map[item.productId] = (map[item.productId] ?? 0) + item.quantity;
+      map[item.productId] = (map[item.productId] || 0) + item.quantity;
     }
     return map;
   }, [cart]);
@@ -124,832 +362,978 @@ export default function App() {
   const filteredProducts = useMemo(
     () =>
       filterProducts(PRODUCTS, {
-        category: activeCategory,
+        category: displayedCategory,
         query: searchQuery,
       }),
-    [activeCategory, searchQuery],
+    [displayedCategory, searchQuery],
   );
 
-  const activeShowcaseMeta = useMemo(
-    () => SHOWCASE_DISHES.find((d) => d.id === active3dDish) ?? SHOWCASE_DISHES[0],
-    [active3dDish],
+  const activeShowcase =
+    SHOWCASE_DISHES.find((d) => d.id === activeDishId) ?? SHOWCASE_DISHES[0];
+  const activeShowcaseProduct =
+    PRODUCTS.find((p) => p.id === activeShowcase.productId) ?? PRODUCTS[0];
+
+  const heroSignatureDish = SHOWCASE_DISHES[heroShowcaseIndex % SHOWCASE_DISHES.length];
+  const heroSignatureProduct =
+    PRODUCTS.find((p) => p.id === heroSignatureDish.productId) ?? PRODUCTS[0];
+
+  const categoryNavItems = useMemo<PillNavItem<ProductCategory>[]>(
+    () => CATEGORY_TABS.map((tab) => ({ id: tab.id, label: tab.label })),
+    [],
   );
 
-  const activeShowcaseProduct = useMemo(
-    () => PRODUCTS.find((p) => p.id === activeShowcaseMeta.productId) ?? PRODUCTS[0],
-    [activeShowcaseMeta],
+  const viewModeNavItems = useMemo<PillNavItem<CatalogViewMode>[]>(
+    () => [
+      { id: 'grid', label: 'Galeri', icon: <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" /> },
+      { id: 'list', label: 'Daftar', icon: <List className="h-3.5 w-3.5" aria-hidden="true" /> },
+    ],
+    [],
   );
 
-  const handleQuickAdd = (product: Product) => {
-    setCart((prev) =>
-      addOrMergeCartItem(prev, {
-        product,
-        spiceLevel: product.supportsSpice ? preferredSpice : undefined,
-      }),
-    );
-    setAddedBanner(`${product.name} masuk ke keranjang`);
-  };
+  const dishNavItems = useMemo<PillNavItem<DishModelId>[]>(
+    () => SHOWCASE_DISHES.map((d) => ({ id: d.id, label: d.label })),
+    [],
+  );
 
-  const handleConfirmCustomAdd = (payload: {
-    product: Product;
-    spiceLevel?: SpiceLevel;
-    toppings: ToppingOption[];
-    note: string;
-    quantity: number;
-  }) => {
-    setCart((prev) => addOrMergeCartItem(prev, payload));
-    setAddedBanner(`${payload.product.name} (${payload.quantity}x) masuk ke keranjang`);
-  };
-
-  const handleQuickHeroSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setActiveCategory(heroCategory);
-    setPreferredSpice(heroSpice);
-    setCheckoutForm((prev) => ({ ...prev, orderMethod: heroMethod }));
-    const menuEl = document.getElementById('menu');
-    menuEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const offset = window.innerWidth >= 1024 ? 92 : 66;
+    const top = Math.max(0, el.getBoundingClientRect().top + window.scrollY - offset);
+    window.scrollTo({ top, behavior: 'smooth' });
   };
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-[#F5EFE4] text-[#14241C]">
-      <ScrollProgressLine />
-      <Navbar totalItems={totalItems} onOpenCart={() => setCartOpen(true)} />
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-screen overflow-x-clip bg-[#F6F3EE] text-[#141210] transition-colors duration-300 dark:bg-[#0A0908] dark:text-[#F7F3EC]">
+        <ScrollProgressLine />
 
-      <main>
+        <Navbar
+          cartCount={totalItems}
+          onOpenCart={() => setCartOpen(true)}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+        />
+
         {/* ============================================================
-            1. HERO SECTION — Full-bleed Dusk Warmindo + Three.js Embers + Quick Order Bar
+            SECTION 1: ASYMMETRIC SPLIT ATELIER HERO (TRUE DUAL-THEME)
            ============================================================ */}
         <section
           id="beranda"
-          className={`relative flex min-h-[92vh] flex-col justify-between overflow-hidden bg-[#0E221A] pt-20 text-[#F8F4EC] sm:min-h-[820px] sm:pt-28 sm:pb-12 ${
-            totalItems > 0 ? 'pb-22' : 'pb-10'
-          }`}
+          className="relative overflow-hidden bg-[#F6F3EE] pt-20 pb-14 text-[#141210] transition-colors duration-300 sm:pt-28 sm:pb-20 lg:min-h-[90vh] lg:pt-32 lg:pb-20 dark:bg-[#0A0908] dark:text-[#F7F3EC]"
         >
-          {/* Full-bleed architectural warmindo photography */}
-          <div className="absolute inset-0 z-0">
-            <img
-              src={HERO_IMAGE}
-              alt="Suasana malam Warmindo Pakuwon's di kawasan Depok, Sleman, Yogyakarta"
-              referrerPolicy="no-referrer"
-              className="h-full w-full object-cover object-center"
-            />
-            {/* Measured multi-stop dark emerald scrim ensuring >= 4.5:1 text contrast */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#0B1C15]/92 via-[#0E221A]/68 to-[#0E221A]/35" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0E221A] via-transparent to-[#0E221A]/45" />
-          </div>
+          {/* Theme-aware atmospheric light wash + Three.js Embers */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_55%_at_18%_22%,rgba(154,107,56,0.12),transparent_68%),radial-gradient(50%_50%_at_84%_72%,rgba(216,176,122,0.14),transparent_70%)] dark:bg-[radial-gradient(60%_55%_at_18%_22%,rgba(216,176,122,0.14),transparent_68%),radial-gradient(50%_50%_at_84%_72%,rgba(154,107,56,0.12),transparent_70%)]"
+          />
+          <HeroEmberCanvas theme={theme} />
 
-          {/* Interactive Three.js WebGL ambient golden embers & steam ribbons */}
-          <HeroEmberCanvas />
-
-          {/* Hero Main Copy */}
-          <div className="relative z-20 mx-auto my-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, ease: LUXURY_EASE }}
-              className="max-w-xl"
-            >
-              <p className="text-xs font-medium tracking-[0.18em] text-[#E6BC7B] sm:text-sm">
-                Depok · Sleman · Yogyakarta
-              </p>
-
-              <h1
-                className="mt-3 font-display font-medium leading-[1.06] tracking-tight text-[#F8F4EC]"
-                style={{
-                  fontSize: 'clamp(2.6rem, 5.4vw, 4.5rem)',
-                  textWrap: 'balance',
-                }}
+          <div className="relative z-20 mx-auto grid max-w-7xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-12 lg:gap-10 lg:px-8">
+            {/* Left Column: Monumental Editorial Typography + Magnetic CTAs */}
+            <div className="min-w-0 lg:col-span-7">
+              <motion.p
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: FLUID_EASE }}
+                className="text-[11px] font-semibold tracking-[0.2em] text-[#9A6B38] uppercase sm:text-xs dark:text-[#D8B07A]"
               >
-                Hangatnya Rasa{' '}
-                <span className="block">
-                  Warung <em className="font-normal italic text-[#E6BC7B]">Istimewa</em>
-                </span>
+                Depok · Sleman · Yogyakarta — 16.00 – 03.00 WIB
+              </motion.p>
+
+              <h1 className="mt-3.5 font-display text-[clamp(2.45rem,9vw,4.65rem)] leading-[0.98] font-medium tracking-tight text-[#141210] dark:text-[#F7F3EC]">
+                <MaskedLine delay={0.05}>Seni Hangat</MaskedLine>
+                <MaskedLine delay={0.14} className="italic text-[#9A6B38] dark:text-[#D8B07A]">
+                  Dapur Malam
+                </MaskedLine>
+                <MaskedLine delay={0.23}>Pakuwon&apos;s</MaskedLine>
               </h1>
 
-              <p className="mt-5 max-w-md text-sm leading-relaxed text-[#F5EFE4]/85 sm:text-base">
-                {STORE_INFO.tagline} Racikan Indomie nyemek, magelangan smokey, camilan hangat,
-                dan kopi susu gula aren — pesan praktis langsung lewat chat WhatsApp.
-              </p>
+              <motion.p
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.3, ease: FLUID_EASE }}
+                className="mt-5 max-w-xl text-sm leading-relaxed text-[#574F46] sm:mt-6 sm:text-lg dark:text-[#CFC6B8]"
+              >
+                Indomie Nyemek berbumbu wajan besi, Magelangan smokey, dan Es Kopi Susu Gula Aren.
+                Inspeksi hidangan 3D interaktif lalu pesan seketika via chat WhatsApp.
+              </motion.p>
 
-              <div className="mt-7 flex flex-wrap items-center gap-3.5">
-                <a
-                  href="#menu"
-                  className="inline-flex min-h-[48px] items-center gap-2.5 rounded-full bg-[#E6BC7B] px-6 py-3 text-sm font-semibold text-[#0E221A] transition-all duration-200 hover:bg-[#F0CC92] active:scale-[0.98] whitespace-nowrap"
-                >
-                  <span>Jelajahi Menu</span>
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </a>
+              {/* Magnetic Primary CTA + Secondary Outline */}
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.38, ease: FLUID_EASE }}
+                className="mt-7 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-3.5"
+              >
+                <MagneticWrap strength={6}>
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection('menu')}
+                    className="inline-flex min-h-[48px] items-center gap-2.5 rounded-full bg-[#141210] px-6 py-3 text-sm font-semibold text-[#F7F3EC] shadow-[0_14px_32px_-12px_rgba(20,18,16,0.38)] hover:bg-[#29241F] cursor-pointer sm:min-h-[50px] sm:px-7 dark:bg-[#D8B07A] dark:text-[#0A0908] dark:shadow-[0_14px_34px_-10px_rgba(216,176,122,0.55)] dark:hover:bg-[#E8C696]"
+                  >
+                    <span>Jelajahi Katalog</span>
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </MagneticWrap>
 
-                <a
-                  href="#studio-3d"
-                  className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-[#F5EFE4]/30 bg-[#0E221A]/55 px-5 py-3 text-sm font-medium text-[#F8F4EC] transition-colors hover:border-[#E6BC7B] hover:text-[#E6BC7B] whitespace-nowrap"
-                >
-                  <span>Inspeksi Hidangan 3D</span>
-                </a>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Floating Dark-Emerald Quick Order & Filter Bar (echoing The Amberleaf booking bar) */}
-          <div className="relative z-20 mx-auto mt-6 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-            <motion.form
-              onSubmit={handleQuickHeroSearch}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.65, delay: 0.15, ease: LUXURY_EASE }}
-              className="grid grid-cols-1 gap-3 rounded-2xl border border-[#E6BC7B]/20 bg-[#0E221A]/94 p-3.5 shadow-2xl sm:grid-cols-2 lg:grid-cols-4 lg:items-center lg:gap-0 lg:rounded-full lg:px-5 lg:py-3"
-            >
-              <div className="flex flex-col px-2 lg:border-r lg:border-[#F5EFE4]/12 lg:px-4">
-                <label
-                  htmlFor="hero-category"
-                  className="text-[11px] font-medium text-[#E6BC7B]/90"
-                >
-                  Kategori Menu
-                </label>
-                <select
-                  id="hero-category"
-                  value={heroCategory}
-                  onChange={(e) => setHeroCategory(e.target.value as ProductCategory)}
-                  className="mt-0.5 min-h-[36px] bg-transparent text-sm font-semibold text-[#F8F4EC] focus:outline-none cursor-pointer"
-                >
-                  {CATEGORY_TABS.map((tab) => (
-                    <option key={tab.id} value={tab.id} className="bg-[#0E221A] text-[#F8F4EC]">
-                      {tab.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col px-2 lg:border-r lg:border-[#F5EFE4]/12 lg:px-4">
-                <label
-                  htmlFor="hero-spice"
-                  className="text-[11px] font-medium text-[#E6BC7B]/90"
-                >
-                  Level Pedas Default
-                </label>
-                <select
-                  id="hero-spice"
-                  value={heroSpice}
-                  onChange={(e) => setHeroSpice(e.target.value as SpiceLevel)}
-                  className="mt-0.5 min-h-[36px] bg-transparent text-sm font-semibold text-[#F8F4EC] focus:outline-none cursor-pointer"
-                >
-                  {SPICE_LEVELS.map((lvl) => (
-                    <option key={lvl} value={lvl} className="bg-[#0E221A] text-[#F8F4EC]">
-                      {lvl}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col px-2 lg:px-4">
-                <label
-                  htmlFor="hero-method"
-                  className="text-[11px] font-medium text-[#E6BC7B]/90"
-                >
-                  Cara Pesan
-                </label>
-                <select
-                  id="hero-method"
-                  value={heroMethod}
-                  onChange={(e) => setHeroMethod(e.target.value as OrderMethod)}
-                  className="mt-0.5 min-h-[36px] bg-transparent text-sm font-semibold text-[#F8F4EC] focus:outline-none cursor-pointer"
-                >
-                  {ORDER_METHODS.map((m) => (
-                    <option key={m} value={m} className="bg-[#0E221A] text-[#F8F4EC]">
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="lg:pl-3">
                 <button
-                  type="submit"
-                  className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-full bg-[#E6BC7B] px-6 py-2.5 text-sm font-semibold text-[#0E221A] transition-colors hover:bg-[#F0CC92] whitespace-nowrap cursor-pointer"
+                  type="button"
+                  onClick={() => scrollToSection('studio-3d')}
+                  className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-[#141210]/18 bg-white/90 px-5 py-3 text-sm font-semibold text-[#141210] hover:border-[#9A6B38] hover:text-[#9A6B38] cursor-pointer sm:min-h-[50px] sm:px-6 dark:border-[#D8B07A]/32 dark:bg-[#161310]/85 dark:text-[#F7F3EC] dark:hover:border-[#D8B07A] dark:hover:text-[#E8C696]"
                 >
-                  <span>Lihat Pilihan</span>
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  <Sparkles className="h-4 w-4 text-[#9A6B38] dark:text-[#D8B07A]" aria-hidden="true" />
+                  <span>Buka Studio 3D</span>
                 </button>
-              </div>
-            </motion.form>
-          </div>
-        </section>
+              </motion.div>
 
-        {/* ============================================================
-            2. FOUR-PILLAR FEATURE STRIP (Warm Ivory, matching reference)
-           ============================================================ */}
-        <section
-          aria-label="Keunggulan Warmindo Pakuwon's"
-          className="border-b border-[#14241C]/8 bg-[#F5EFE4] py-9 sm:py-11"
-        >
-          <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-4 sm:px-6 lg:grid-cols-4 lg:gap-8 lg:px-8">
-            {[
-              {
-                icon: Soup,
-                title: 'Indomie Racikan Wajan',
-                desc: 'Bumbu rempah ulek & telur lumer',
-              },
-              {
-                icon: Flame,
-                title: 'Magelangan Smokey',
-                desc: 'Porsi kenyang khas malam Jogja',
-              },
-              {
-                icon: Coffee,
-                title: 'Kopi Aren & Teh Melati',
-                desc: 'Seduhan segar teman nongkrong',
-              },
-              {
-                icon: MessageCircle,
-                title: 'Order Cepat via WA',
-                desc: 'Otomatis terformat, tanpa antre',
-              },
-            ].map((item, idx) => {
-              const Icon = item.icon;
-              return (
-                <RevealBlock key={item.title} delay={idx * 0.06} yOffset={12}>
-                  <div className="flex items-start gap-3.5">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#14241C]/12 bg-[#FAF7F0] text-[#0E221A]">
-                      <Icon className="h-5 w-5" strokeWidth={1.6} aria-hidden="true" />
-                    </div>
-                    <div>
-                      <h2 className="font-sans text-sm font-semibold text-[#14241C]">
-                        {item.title}
-                      </h2>
-                      <p className="mt-0.5 text-xs leading-relaxed text-[#515F56]">
-                        {item.desc}
-                      </p>
-                    </div>
-                  </div>
-                </RevealBlock>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ============================================================
-            3. CERITA KAMI — Arched Editorial Story Section (Warm Ivory)
-           ============================================================ */}
-        <section
-          id="cerita"
-          className="relative overflow-hidden bg-[#F5EFE4] py-16 sm:py-24"
-        >
-          <GoldLeafOrnament className="pointer-events-none absolute top-10 -left-10 h-56 w-56 text-[#C59143]/28" />
-          <GoldLeafOrnament className="pointer-events-none absolute -right-10 bottom-8 h-60 w-60 rotate-180 text-[#C59143]/22" />
-
-          <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 sm:px-6 lg:grid-cols-12 lg:gap-14 lg:px-8">
-            {/* Arched editorial photograph (signature silhouette from reference) */}
-            <RevealBlock className="lg:col-span-6">
-              <div className="relative mx-auto max-w-lg lg:max-w-none">
-                <div className="arch-frame overflow-hidden border border-[#14241C]/10 bg-[#E9DEC9] shadow-[0_24px_50px_-24px_rgba(14,34,26,0.28)]">
-                  <img
-                    src={STORY_IMAGE}
-                    alt="Proses memasak mie nyemek di wajan panas Warmindo Pakuwon's"
-                    referrerPolicy="no-referrer"
-                    className="aspect-[4/3] w-full object-cover"
-                  />
-                </div>
-              </div>
-            </RevealBlock>
-
-            {/* Editorial narrative */}
-            <RevealBlock delay={0.1} className="lg:col-span-6">
-              <p className="text-xs font-semibold tracking-[0.16em] text-[#9E6B24]">
-                Cerita Kami
-              </p>
-              <h2
-                className="mt-2.5 font-display text-3xl font-medium leading-tight text-[#14241C] sm:text-4xl lg:text-[2.75rem]"
-                style={{ textWrap: 'balance' }}
+              {/* Architectural Inline Order Preference Strip */}
+              <motion.div
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.46, ease: FLUID_EASE }}
+                className="mt-8 grid grid-cols-1 gap-3 rounded-[24px] border border-[#141210]/12 bg-white p-3.5 shadow-[0_14px_36px_-22px_rgba(20,18,16,0.2)] sm:mt-10 md:grid-cols-3 md:items-center dark:border-[#D8B07A]/18 dark:bg-[#141210]/94 dark:shadow-none"
               >
-                Tempat Hangat Penuh <em className="italic text-[#B57F32]">Cerita</em>
-              </h2>
-
-              <p className="mt-5 max-w-xl text-sm leading-relaxed text-[#515F56] sm:text-base">
-                Berlokasi di kawasan strategis dekat Pakuwon Mall & Seturan, Depok, Sleman,{' '}
-                <strong className="font-semibold text-[#14241C]">{STORE_INFO.name}</strong> hadir
-                dari gagasan sederhana: menyajikan kehangatan warung Indomie khas Yogyakarta
-                dengan racikan bumbu jujur, kebersihan dapur terjaga, dan kenyamanan ruang
-                singgah hingga dini hari.
-              </p>
-
-              <p className="mt-3.5 max-w-xl text-sm leading-relaxed text-[#515F56] sm:text-base">
-                Baik untuk makan malam santai sepulang kuliah, lembur tugas, maupun pesan antar
-                cepat ke kos sekitar Pakuwon — setiap porsi dimasak segar satu per satu di atas
-                wajan panas saat pesanan Anda masuk.
-              </p>
-
-              <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-[#14241C]/10 pt-5 text-xs font-medium text-[#515F56] sm:text-sm">
-                <span className="inline-flex items-center gap-1.5 text-[#14241C]">
-                  <Clock className="h-4 w-4 text-[#9E6B24]" aria-hidden="true" />
-                  {STORE_INFO.hours}
-                </span>
-                <span aria-hidden="true" className="hidden sm:inline">
-                  ·
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4 text-[#9E6B24]" aria-hidden="true" />
-                  Depok, Sleman, Yogyakarta
-                </span>
-              </div>
-
-              <div className="mt-7">
-                <a
-                  href={STORE_INFO.mapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-[44px] items-center gap-2 font-sans text-sm font-semibold text-[#0E221A] underline decoration-[#C59143] decoration-2 underline-offset-4 transition-colors hover:text-[#9E6B24]"
-                >
-                  <span>Buka Lokasi di Google Maps</span>
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </a>
-              </div>
-            </RevealBlock>
-          </div>
-        </section>
-
-        {/* ============================================================
-            4. THREE.JS 3D CULINARY STUDIO (Deep Forest Emerald Band)
-               Echoes The Amberleaf's "A Culinary Journey" dark emerald band
-           ============================================================ */}
-        <section
-          id="studio-3d"
-          className="relative overflow-hidden bg-[#0E221A] py-16 text-[#F8F4EC] sm:py-24"
-        >
-          <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 sm:px-6 lg:grid-cols-12 lg:gap-12 lg:px-8">
-            {/* Left narrative + interactive 3D dish switcher */}
-            <div className="lg:col-span-5">
-              <RevealBlock>
-                <p className="text-xs font-semibold tracking-[0.16em] text-[#E6BC7B]">
-                  Karya Dapur 3D Interaktif
-                </p>
-                <h2
-                  className="mt-2.5 font-display text-3xl font-medium leading-tight text-[#F8F4EC] sm:text-4xl lg:text-[2.75rem]"
-                  style={{ textWrap: 'balance' }}
-                >
-                  Perjalanan <em className="italic text-[#E6BC7B]">Cita Rasa</em>
-                </h2>
-                <p className="mt-4 text-sm leading-relaxed text-[#F5EFE4]/80 sm:text-base">
-                  Putar dan amati komposisi tiga menu paling dicari di Warmindo Pakuwon&apos;s
-                  dalam tampilan 3D interaktif sebelum memasukkannya ke keranjang WhatsApp Anda.
-                </p>
-
-                {/* Dish switcher tabs */}
-                <div
-                  className="mt-6 flex flex-wrap gap-2"
-                  role="tablist"
-                  aria-label="Pilih model hidangan 3D"
-                >
-                  {SHOWCASE_DISHES.map((dish) => {
-                    const active = active3dDish === dish.id;
-                    return (
-                      <button
-                        key={dish.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        onClick={() => setActive3dDish(dish.id)}
-                        className={`min-h-[44px] rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 whitespace-nowrap cursor-pointer ${
-                          active
-                            ? 'bg-[#E6BC7B] text-[#0E221A]'
-                            : 'border border-[#F5EFE4]/20 bg-[#152E24] text-[#F5EFE4]/85 hover:border-[#E6BC7B]/60 hover:text-[#E6BC7B]'
-                        }`}
-                      >
-                        {dish.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Active Dish Live Details */}
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={activeShowcaseProduct.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.25, ease: LUXURY_EASE }}
-                    className="mt-7 border-t border-[#F5EFE4]/12 pt-6"
-                  >
-                    <div className="flex items-baseline justify-between gap-4">
-                      <h3 className="font-display text-2xl font-semibold text-[#F8F4EC]">
-                        {activeShowcaseProduct.name}
-                      </h3>
-                      <span className="text-lg font-bold text-[#E6BC7B] tabular-nums whitespace-nowrap">
-                        {formatRupiah(activeShowcaseProduct.price)}
-                      </span>
-                    </div>
-
-                    <p className="mt-2 text-sm leading-relaxed text-[#F5EFE4]/78">
-                      {activeShowcaseMeta.subtitle}
-                    </p>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#E6BC7B]/90">
-                      {activeShowcaseMeta.tastingNotes.map((note, i) => (
-                        <span key={note} className="inline-flex items-center gap-2">
-                          {i > 0 && <span aria-hidden="true">·</span>}
-                          <span>{note}</span>
-                        </span>
+                <div className="flex items-center gap-3 border-b border-[#141210]/8 px-2 pb-2.5 md:border-r md:border-b-0 md:py-1 dark:border-[#D8B07A]/14">
+                  <Utensils className="h-4 w-4 shrink-0 text-[#9A6B38] dark:text-[#D8B07A]" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <label
+                      htmlFor="hero-order-method"
+                      className="block text-[10px] font-semibold tracking-wider text-[#73695E] uppercase dark:text-[#9D9488]"
+                    >
+                      Layanan
+                    </label>
+                    <select
+                      id="hero-order-method"
+                      value={checkoutForm.orderMethod}
+                      onChange={(e) =>
+                        setCheckoutForm((prev) => ({
+                          ...prev,
+                          orderMethod: e.target.value as OrderMethod,
+                        }))
+                      }
+                      className="w-full cursor-pointer bg-transparent text-xs font-semibold text-[#141210] focus:outline-none sm:text-sm dark:text-[#F7F3EC]"
+                    >
+                      {ORDER_METHODS.map((m) => (
+                        <option key={m} value={m} className="bg-white text-[#141210] dark:bg-[#141210] dark:text-[#F7F3EC]">
+                          {m}
+                        </option>
                       ))}
-                    </div>
+                    </select>
+                  </div>
+                </div>
 
-                    <div className="mt-6 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleQuickAdd(activeShowcaseProduct)}
-                        className="inline-flex min-h-[46px] items-center gap-2 rounded-full bg-[#E6BC7B] px-6 py-2.5 text-sm font-semibold text-[#0E221A] transition-colors hover:bg-[#F0CC92] whitespace-nowrap cursor-pointer"
-                      >
-                        <span>Tambah Menu Ini</span>
-                        <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                      </button>
+                <div className="flex items-center gap-3 border-b border-[#141210]/8 px-2 pb-2.5 md:border-r md:border-b-0 md:py-1 dark:border-[#D8B07A]/14">
+                  <Flame className="h-4 w-4 shrink-0 text-[#9A6B38] dark:text-[#D8B07A]" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <label
+                      htmlFor="hero-spice-level"
+                      className="block text-[10px] font-semibold tracking-wider text-[#73695E] uppercase dark:text-[#9D9488]"
+                    >
+                      Kepedasan
+                    </label>
+                    <select
+                      id="hero-spice-level"
+                      value={defaultSpice}
+                      onChange={(e) => setDefaultSpice(e.target.value as SpiceLevel)}
+                      className="w-full cursor-pointer bg-transparent text-xs font-semibold text-[#141210] focus:outline-none sm:text-sm dark:text-[#F7F3EC]"
+                    >
+                      {SPICE_LEVELS.map((lvl) => (
+                        <option key={lvl} value={lvl} className="bg-white text-[#141210] dark:bg-[#141210] dark:text-[#F7F3EC]">
+                          {lvl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-                      {(activeShowcaseProduct.supportsSpice ||
-                        activeShowcaseProduct.supportsToppings) && (
-                        <button
-                          type="button"
-                          onClick={() => setCustomizingProduct(activeShowcaseProduct)}
-                          className="inline-flex min-h-[46px] items-center gap-2 rounded-full border border-[#F5EFE4]/25 px-5 py-2.5 text-sm font-medium text-[#F8F4EC] transition-colors hover:border-[#E6BC7B] hover:text-[#E6BC7B] whitespace-nowrap cursor-pointer"
-                        >
-                          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-                          <span>Atur Topping</span>
-                        </button>
-                      )}
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
-              </RevealBlock>
-            </div>
-
-            {/* Right Interactive Three.js 3D Viewport */}
-            <div className="lg:col-span-7">
-              <CulinaryShowcase3D
-                activeDish={active3dDish}
-                onSelectDish={setActive3dDish}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* ============================================================
-            5. KATALOG PRODUK & BELANJA VIA WA (Warm Ivory Collection Grid)
-               Echoes The Amberleaf's "Thoughtfully Designed Stays" card grid
-           ============================================================ */}
-        <section id="menu" className="bg-[#F5EFE4] py-16 sm:py-24">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            {/* Section heading + Search input */}
-            <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-              <RevealBlock>
-                <p className="text-xs font-semibold tracking-[0.16em] text-[#9E6B24]">
-                  Katalog Warung
-                </p>
-                <h2
-                  className="mt-2 font-display text-3xl font-medium leading-tight text-[#14241C] sm:text-4xl lg:text-[2.75rem]"
-                  style={{ textWrap: 'balance' }}
-                >
-                  Menu Pilihan <em className="italic text-[#B57F32]">Siap Masak</em>
-                </h2>
-              </RevealBlock>
-
-              {/* Search bar */}
-              <div className="relative w-full md:max-w-xs">
-                <label htmlFor="menu-search" className="sr-only">
-                  Cari menu Warmindo Pakuwon&apos;s
-                </label>
-                <Search
-                  className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[#515F56]"
-                  aria-hidden="true"
-                />
-                <input
-                  id="menu-search"
-                  type="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari mie, magelangan, kopi..."
-                  className="min-h-[44px] w-full rounded-full border border-[#14241C]/15 bg-[#FAF7F0] pr-10 pl-10 text-sm text-[#14241C] placeholder:text-[#515F56]/70 focus:border-[#0E221A] focus:outline-none"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    aria-label="Hapus pencarian"
-                    className="absolute top-1/2 right-2.5 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[#515F56] hover:bg-[#E9DEC9] cursor-pointer"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Category filter tabs (horizontal touch scroll on mobile) */}
-            <div
-              className="no-scrollbar mt-7 flex items-center gap-2 overflow-x-auto pb-2"
-              role="tablist"
-              aria-label="Filter kategori menu"
-            >
-              {CATEGORY_TABS.map((tab) => {
-                const active = activeCategory === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setActiveCategory(tab.id)}
-                    className={`relative min-h-[44px] rounded-full px-4.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer sm:text-sm ${
-                      active
-                        ? 'bg-[#0E221A] text-[#E6BC7B]'
-                        : 'border border-[#14241C]/12 bg-[#FAF7F0] text-[#14241C] hover:border-[#14241C]/35 hover:bg-[#EFE7D8]'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Product Grid */}
-            {filteredProducts.length > 0 ? (
-              <div
-                data-testid="product-grid"
-                className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-7"
-              >
-                {filteredProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    quantityInCart={quantityByProductId[product.id] ?? 0}
-                    onQuickAdd={handleQuickAdd}
-                    onCustomize={setCustomizingProduct}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="mt-10 rounded-2xl border border-[#14241C]/10 bg-[#FAF7F0] px-6 py-12 text-center">
-                <UtensilsCrossed
-                  className="mx-auto h-9 w-9 text-[#9E6B24]"
-                  aria-hidden="true"
-                />
-                <h3 className="mt-3 font-display text-xl font-semibold text-[#14241C]">
-                  Menu Tidak Ditemukan
-                </h3>
-                <p className="mt-1.5 text-sm text-[#515F56]">
-                  Tidak ada menu yang cocok dengan kata kunci &ldquo;{searchQuery}&rdquo;.
-                </p>
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveCategory('all');
-                    setSearchQuery('');
+                    if (totalItems > 0) {
+                      setCartOpen(true);
+                    } else {
+                      scrollToSection('menu');
+                    }
                   }}
-                  className="mt-5 inline-flex min-h-[44px] items-center rounded-full bg-[#0E221A] px-5 py-2 text-xs font-semibold text-[#E6BC7B] hover:bg-[#193A2D] cursor-pointer"
+                  className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full bg-[#ECE6DC] px-4 py-2 text-xs font-semibold text-[#141210] hover:bg-[#141210] hover:text-[#F7F3EC] whitespace-nowrap cursor-pointer dark:bg-[#241E18] dark:text-[#E8C696] dark:hover:bg-[#D8B07A] dark:hover:text-[#0A0908]"
                 >
-                  Tampilkan Semua Menu
+                  <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                  <span>{totalItems > 0 ? `Chat WA (${totalItems})` : 'Mulai Pesan WA'}</span>
                 </button>
-              </div>
-            )}
+              </motion.div>
+            </div>
+
+            {/* Right Column: Sculptural Parallax Frame + Interactive Signature Switcher */}
+            <div className="min-w-0 lg:col-span-5">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 18 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.75, delay: 0.2, ease: FLUID_EASE }}
+                className="relative"
+              >
+                <div className="relative overflow-hidden rounded-[28px] border border-[#141210]/12 bg-[#ECE6DC] shadow-[0_28px_64px_-26px_rgba(20,18,16,0.3)] sm:rounded-[32px] dark:border-[#D8B07A]/24 dark:bg-[#141210] dark:shadow-[0_32px_72px_-24px_rgba(0,0,0,0.9)]">
+                  <ParallaxFrame distance={18} className="h-[360px] w-full sm:h-[460px]">
+                    <img
+                      src={HERO_IMAGE}
+                      alt="Suasana malam hangat Warmindo Pakuwon's Sleman Yogyakarta"
+                      referrerPolicy="no-referrer"
+                      className="h-[112%] w-full -translate-y-4 object-cover"
+                    />
+                  </ParallaxFrame>
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#141210]/72 via-[#141210]/12 to-transparent dark:from-[#0A0908]/94 dark:via-[#0A0908]/25" />
+
+                  {/* Interactive Floating Signature Tasting Card (Dual-theme & responsive mobile stack) */}
+                  <div className="absolute right-3 bottom-3 left-3 rounded-[20px] border border-[#141210]/10 bg-white/96 p-3.5 text-[#141210] shadow-lg sm:right-4 sm:bottom-4 sm:left-4 sm:rounded-[22px] sm:p-4 dark:border-[#D8B07A]/24 dark:bg-[#12100E]/95 dark:text-[#F7F3EC]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-semibold tracking-[0.2em] text-[#9A6B38] uppercase dark:text-[#D8B07A]">
+                        Signature Pilihan
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {SHOWCASE_DISHES.map((dish, idx) => (
+                          <button
+                            key={dish.id}
+                            type="button"
+                            onClick={() => setHeroShowcaseIndex(idx)}
+                            aria-label={`Lihat pratinjau ${dish.label}`}
+                            className={`h-2 rounded-full transition-all cursor-pointer ${
+                              idx === heroShowcaseIndex
+                                ? 'w-6 bg-[#9A6B38] dark:bg-[#D8B07A]'
+                                : 'w-2 bg-[#141210]/20 hover:bg-[#141210]/40 dark:bg-[#D8B07A]/30 dark:hover:bg-[#D8B07A]/60'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={heroSignatureDish.id}
+                        initial={{ opacity: 0, filter: 'blur(6px)', y: 6 }}
+                        animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+                        exit={{ opacity: 0, filter: 'blur(6px)', y: -6 }}
+                        transition={{ duration: 0.28, ease: FLUID_EASE }}
+                        className="mt-2.5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <h2 className="truncate font-display text-lg font-semibold text-[#141210] sm:text-xl dark:text-[#F7F3EC]">
+                            {heroSignatureProduct.name}
+                          </h2>
+                          <p className="mt-0.5 truncate text-xs text-[#574F46] dark:text-[#A9A093]">
+                            {heroSignatureDish.subtitle}
+                          </p>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveDishId(heroSignatureDish.id);
+                              scrollToSection('studio-3d');
+                            }}
+                            className="inline-flex h-9 items-center justify-center rounded-full border border-[#141210]/18 px-3.5 text-xs font-semibold text-[#141210] hover:bg-[#141210] hover:text-[#F7F3EC] cursor-pointer sm:h-10 dark:border-[#D8B07A]/35 dark:text-[#E8C696] dark:hover:bg-[#D8B07A] dark:hover:text-[#0A0908]"
+                          >
+                            3D
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickAdd(heroSignatureProduct)}
+                            className="inline-flex h-9 flex-1 items-center justify-center rounded-full bg-[#141210] px-3.5 text-xs font-semibold text-[#F7F3EC] hover:bg-[#2A2520] cursor-pointer tabular-nums sm:h-10 sm:flex-initial dark:bg-[#D8B07A] dark:text-[#0A0908] dark:hover:bg-[#E8C696]"
+                          >
+                            +{formatRupiah(heroSignatureProduct.price)}
+                          </button>
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
           </div>
         </section>
 
         {/* ============================================================
-            6. SUASANA & LOKASI — Panoramic Dusk Experience Banner
-               Echoes The Amberleaf's "More Than a Stay" banner
+            EDITORIAL INFINITE CULINARY RIBBON
+           ============================================================ */}
+        <div
+          aria-hidden="true"
+          className="overflow-hidden border-y border-[#141210]/10 bg-[#ECE6DC] py-3.5 text-[#141210] dark:border-[#D8B07A]/16 dark:bg-[#110F0D] dark:text-[#D8B07A]"
+        >
+          <div className="marquee-track">
+            {[0, 1].map((dup) => (
+              <div key={dup} className="flex shrink-0 items-center gap-8 pr-8">
+                {MARQUEE_PHRASES.map((phrase) => (
+                  <span
+                    key={`${dup}-${phrase}`}
+                    className="flex items-center gap-8 font-display text-base italic tracking-wide sm:text-xl"
+                  >
+                    <span>{phrase}</span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#9A6B38] dark:bg-[#D8B07A]/60" />
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ============================================================
+            SECTION 2: THREE.JS 3D TASTING STUDIO (TRUE DUAL-THEME)
+           ============================================================ */}
+        <section
+          id="studio-3d"
+          className="relative scroll-mt-24 overflow-hidden bg-[#EFEAE1] py-16 text-[#141210] transition-colors duration-300 sm:py-24 dark:bg-[#0D0B09] dark:text-[#F7F3EC]"
+        >
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            {/* Gallery Header + Dish Sliding Pill Selector */}
+            <div className="flex flex-col items-start justify-between gap-5 lg:flex-row lg:items-end lg:gap-6">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold tracking-[0.22em] text-[#9A6B38] uppercase dark:text-[#D8B07A]">
+                  Studio Hidangan 3D Interaktif
+                </p>
+                <h2 className="mt-2 font-display text-3xl leading-tight font-medium text-[#141210] sm:text-5xl dark:text-[#F7F3EC]">
+                  Inspeksi <span className="italic text-[#9A6B38] dark:text-[#D8B07A]">360°</span> Sebelum Memesan
+                </h2>
+              </div>
+
+              <div className="no-scrollbar max-w-full overflow-x-auto pb-1">
+                <SlidingPillNav
+                  items={dishNavItems}
+                  activeId={activeDishId}
+                  onSelect={(id) => setActiveDishId(id)}
+                  ariaLabel="Pilih model hidangan 3D"
+                  variant="surface"
+                  testId="dish-3d-pill-nav"
+                />
+              </div>
+            </div>
+
+            {/* 12-Column Theatrical Stage + Tasting Dossier */}
+            <div className="mt-8 grid items-stretch gap-6 sm:mt-10 lg:grid-cols-12 lg:gap-8">
+              {/* Interactive Three.js Stage (7 cols) */}
+              <div className="min-w-0 lg:col-span-7">
+                <CulinaryShowcase3D activeDish={activeDishId} onSelectDish={setActiveDishId} />
+              </div>
+
+              {/* Atelier Tasting Dossier (5 cols) */}
+              <div className="flex min-w-0 flex-col justify-between rounded-[26px] border border-[#141210]/10 bg-white p-5 shadow-[0_16px_42px_-24px_rgba(20,18,16,0.18)] sm:rounded-[28px] sm:p-7 lg:col-span-5 dark:border-[#D8B07A]/18 dark:bg-[#151210] dark:shadow-none">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeDishId}
+                    initial={{ opacity: 0, filter: 'blur(8px)', y: 10 }}
+                    animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+                    exit={{ opacity: 0, filter: 'blur(8px)', y: -8 }}
+                    transition={{ duration: 0.34, ease: FLUID_EASE }}
+                  >
+                    <p className="text-xs font-medium text-[#73695E] dark:text-[#9D9488]">
+                      {activeShowcaseProduct.categoryLabel} · Estimasi{' '}
+                      {activeShowcaseProduct.prepMinutes} menit masak
+                    </p>
+
+                    <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
+                      <h3 className="font-display text-2xl font-semibold text-[#141210] sm:text-3xl dark:text-[#F7F3EC]">
+                        {activeShowcaseProduct.name}
+                      </h3>
+                      <AnimatedNumber
+                        value={activeShowcaseProduct.price}
+                        durationMs={420}
+                        format={formatRupiah}
+                        className="font-display text-2xl font-semibold text-[#9A6B38] dark:text-[#D8B07A]"
+                      />
+                    </div>
+
+                    <p className="mt-3 text-sm leading-relaxed text-[#574F46] dark:text-[#CFC6B8]">
+                      {activeShowcaseProduct.fullDesc}
+                    </p>
+
+                    {/* Clean unboxed tasting notes */}
+                    <p className="mt-4 text-xs font-semibold text-[#9A6B38] dark:text-[#D8B07A]">
+                      {activeShowcase.tastingNotes.join('  ·  ')}
+                    </p>
+
+                    {/* Animated Progress Bar Craft Metrics */}
+                    <div className="mt-6 space-y-3 border-t border-[#141210]/10 pt-5 dark:border-[#D8B07A]/14">
+                      {DISH_CRAFT_METRICS[activeDishId].map((metric, idx) => (
+                        <div key={`${activeDishId}-${metric.label}`}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-[#574F46] dark:text-[#CFC6B8]">{metric.label}</span>
+                            <span className="font-semibold text-[#9A6B38] tabular-nums dark:text-[#D8B07A]">
+                              {metric.score}%
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-[#ECE6DC] dark:bg-[#241F1A]">
+                            <div
+                              style={
+                                {
+                                  width: `${metric.score}%`,
+                                  '--i': idx,
+                                } as CSSProperties
+                              }
+                              className="progress-fill-bar h-full rounded-full bg-gradient-to-r from-[#9A6B38] to-[#D8B07A] dark:to-[#E8C696]"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+
+                <div className="mt-6 flex flex-wrap items-center gap-2.5 pt-4 sm:mt-7 sm:gap-3">
+                  <MagneticWrap strength={5} className="min-w-[180px] flex-1">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAdd(activeShowcaseProduct)}
+                      className="inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-full bg-[#141210] px-5 py-2.5 text-sm font-semibold text-[#F7F3EC] hover:bg-[#2A2520] whitespace-nowrap cursor-pointer sm:min-h-[48px] dark:bg-[#D8B07A] dark:text-[#0A0908] dark:hover:bg-[#E8C696]"
+                    >
+                      <span>Tambah ke Keranjang</span>
+                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </MagneticWrap>
+                  {(activeShowcaseProduct.supportsSpice ||
+                    activeShowcaseProduct.supportsToppings) && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomizingProduct(activeShowcaseProduct)}
+                      className="inline-flex min-h-[46px] items-center justify-center gap-1.5 rounded-full border border-[#141210]/18 px-5 py-2.5 text-sm font-semibold text-[#141210] hover:border-[#141210] hover:bg-[#ECE6DC] whitespace-nowrap cursor-pointer sm:min-h-[48px] dark:border-[#D8B07A]/32 dark:text-[#F7F3EC] dark:hover:border-[#D8B07A] dark:hover:bg-[#1E1A16] dark:hover:text-[#E8C696]"
+                    >
+                      <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                      <span>Racik</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ============================================================
+            SECTION 3: DUAL-VIEW MORPHING CATALOG (GALERI / DAFTAR)
+           ============================================================ */}
+        <section
+          id="menu"
+          className="scroll-mt-24 bg-[#F6F3EE] py-16 transition-colors duration-300 sm:py-24 dark:bg-[#0A0908]"
+        >
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <RevealBlock className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
+              <div className="max-w-xl">
+                <p className="text-xs font-semibold tracking-[0.22em] text-[#9A6B38] uppercase dark:text-[#D8B07A]">
+                  Katalog Kurasi &amp; Pesan WhatsApp
+                </p>
+                <h2 className="mt-2 font-display text-3xl leading-tight font-medium text-[#141210] sm:text-5xl dark:text-[#F7F3EC]">
+                  Hidangan Pilihan <span className="italic text-[#9A6B38] dark:text-[#D8B07A]">Malam Ini</span>
+                </h2>
+                <p className="mt-2.5 text-sm leading-relaxed text-[#574F46] dark:text-[#A9A093]">
+                  Atur level pedas, tambah topping favorit, lalu kirim rincian pesanan otomatis ke
+                  WhatsApp Warmindo Pakuwon&apos;s.
+                </p>
+              </div>
+
+              {/* Search + View Mode Switcher */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="relative w-full sm:w-64">
+                  <Search
+                    className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-[#73695E] dark:text-[#9D9488]"
+                    aria-hidden="true"
+                  />
+                  <label htmlFor="menu-search" className="sr-only">
+                    Cari menu warmindo
+                  </label>
+                  <input
+                    id="menu-search"
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cari nyemek, kopi, roti..."
+                    className="min-h-[44px] w-full rounded-full border border-[#141210]/14 bg-white py-2 pr-4 pl-10 text-sm text-[#141210] placeholder:text-[#73695E]/70 focus:border-[#141210] focus:outline-none dark:border-[#D8B07A]/20 dark:bg-[#141210] dark:text-[#F7F3EC] dark:placeholder:text-[#9D9488]/70 dark:focus:border-[#D8B07A]"
+                  />
+                </div>
+
+                <div className="self-start sm:self-auto">
+                  <SlidingPillNav
+                    items={viewModeNavItems}
+                    activeId={viewMode}
+                    onSelect={handleSelectViewMode}
+                    ariaLabel="Mode tampilan katalog"
+                    variant="surface"
+                    testId="catalog-view-pill-nav"
+                  />
+                </div>
+              </div>
+            </RevealBlock>
+
+            {/* Elastic Category Sliding Pill Bar */}
+            <div className="no-scrollbar mt-6 max-w-full overflow-x-auto pb-1.5 sm:mt-7">
+              <SlidingPillNav
+                items={categoryNavItems}
+                activeId={selectedCategory}
+                onSelect={handleSelectCategory}
+                ariaLabel="Kategori menu"
+                variant="surface"
+                testId="category-sliding-nav"
+              />
+            </div>
+
+            {/* Dual-View Morphing Product Grid / Tasting List */}
+            <div className={`morph-container mt-7 sm:mt-9 ${isMorphing ? 'morph-out' : ''}`}>
+              {filteredProducts.length === 0 ? (
+                <div className="rounded-[26px] border border-[#141210]/10 bg-white p-10 text-center sm:p-12 dark:border-[#D8B07A]/16 dark:bg-[#141210]">
+                  <p className="font-display text-2xl font-semibold text-[#141210] dark:text-[#F7F3EC]">
+                    Menu tidak ditemukan
+                  </p>
+                  <p className="mt-1.5 text-sm text-[#574F46] dark:text-[#A9A093]">
+                    Coba kata kunci lain atau tampilkan kembali seluruh kategori menu.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      handleSelectCategory('all');
+                    }}
+                    className="mt-5 inline-flex min-h-[42px] items-center gap-2 rounded-full bg-[#141210] px-5 py-2 text-xs font-semibold text-[#F7F3EC] cursor-pointer dark:bg-[#D8B07A] dark:text-[#0A0908]"
+                  >
+                    Tampilkan Semua Menu
+                  </button>
+                </div>
+              ) : displayedViewMode === 'list' ? (
+                <div
+                  key={`list-${displayedCategory}-${morphKey}`}
+                  data-testid="catalog-list-view"
+                  className="mx-auto max-w-4xl space-y-3.5"
+                >
+                  {filteredProducts.map((product, index) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      index={index}
+                      cartQty={cartQtyByProduct[product.id] ?? 0}
+                      viewMode="list"
+                      onQuickAdd={handleQuickAdd}
+                      onCustomize={setCustomizingProduct}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div
+                  key={`grid-${displayedCategory}-${morphKey}`}
+                  data-testid="catalog-grid-view"
+                  className="grid gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3"
+                >
+                  {filteredProducts.map((product, index) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      index={index}
+                      cartQty={cartQtyByProduct[product.id] ?? 0}
+                      viewMode="grid"
+                      onQuickAdd={handleQuickAdd}
+                      onCustomize={setCustomizingProduct}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ============================================================
+            SECTION 4: ASYMMETRIC EDITORIAL CRAFT BENTO (#cerita)
+           ============================================================ */}
+        <section
+          id="cerita"
+          ref={craftRef}
+          className="scroll-mt-24 border-t border-[#141210]/8 bg-[#EFEAE1] py-16 transition-colors duration-300 sm:py-24 dark:border-[#D8B07A]/12 dark:bg-[#0F0D0B]"
+        >
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="grid items-stretch gap-6 sm:gap-8 lg:grid-cols-12">
+              {/* Left 5 cols: Sculpted Parallax Wok Photography */}
+              <RevealBlock className="min-w-0 lg:col-span-5">
+                <div className="relative h-full min-h-[310px] overflow-hidden rounded-[26px] border border-[#141210]/12 bg-[#ECE6DC] shadow-[0_22px_52px_-24px_rgba(20,18,16,0.28)] sm:min-h-[380px] sm:rounded-[30px] dark:border-[#D8B07A]/20 dark:bg-[#141210]">
+                  <ParallaxFrame distance={20} className="h-full w-full">
+                    <img
+                      src={STORY_IMAGE}
+                      alt="Proses memasak wajan besi hangat Warmindo Pakuwon's"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      className="h-[114%] w-full -translate-y-4 object-cover"
+                    />
+                  </ParallaxFrame>
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#141210]/84 via-transparent to-transparent" />
+                  <div className="absolute right-5 bottom-5 left-5 text-[#F7F3EC] sm:right-6 sm:bottom-6 sm:left-6">
+                    <p className="text-[11px] font-semibold tracking-[0.2em] text-[#E8C696] uppercase">
+                      Filosofi Wajan Besi
+                    </p>
+                    <p className="mt-1 font-display text-xl italic sm:text-2xl">
+                      Dimasak per porsi, disajikan mengepul.
+                    </p>
+                  </div>
+                </div>
+              </RevealBlock>
+
+              {/* Right 7 cols: Story Narrative + Bento KPI Grid + SVG Draw-In Curve */}
+              <div className="flex min-w-0 flex-col justify-between gap-5 sm:gap-6 lg:col-span-7">
+                <RevealBlock delay={0.05}>
+                  <p className="text-xs font-semibold tracking-[0.22em] text-[#9A6B38] uppercase dark:text-[#D8B07A]">
+                    Kisah Dapur Pakuwon&apos;s
+                  </p>
+                  <h2 className="mt-2 font-display text-3xl leading-tight font-medium text-[#141210] sm:text-5xl dark:text-[#F7F3EC]">
+                    Tradisi Warmindo Jogja dalam{' '}
+                    <span className="italic text-[#9A6B38] dark:text-[#D8B07A]">Sentuhan Modern</span>
+                  </h2>
+                  <p className="mt-3.5 text-sm leading-relaxed text-[#574F46] sm:mt-4 sm:text-base dark:text-[#B5AC9E]">
+                    Berdiri di kawasan hidup Pakuwon Mall &amp; Seturan, kami menjaga standar rasa
+                    klasik Jogja: bumbu bawang dan cabai segar yang diulek setiap sore, api wajan
+                    terjaga untuk aroma smokey alami, serta antrean praktis lewat pesan WhatsApp.
+                  </p>
+                </RevealBlock>
+
+                {/* Bento Metrics */}
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3 sm:gap-4">
+                  <div className="spotlight-card rounded-[22px] border border-[#141210]/10 bg-white p-4 sm:rounded-[24px] sm:p-5 dark:border-[#D8B07A]/15 dark:bg-[#151210]">
+                    <p className="text-xs font-medium text-[#73695E] dark:text-[#9D9488]">
+                      Koleksi Menu
+                    </p>
+                    <p className="mt-1.5 font-display text-3xl font-semibold text-[#141210] whitespace-nowrap sm:mt-2 sm:text-4xl dark:text-[#E8C696]">
+                      <AnimatedNumber
+                        value={craftVisible ? PRODUCTS.length : 0}
+                        durationMs={850}
+                        format={(n) => `${Math.round(n)}+`}
+                      />
+                    </p>
+                    <p className="mt-1 text-xs text-[#574F46] dark:text-[#A9A093]">
+                      Mie, nasi, camilan &amp; kopi
+                    </p>
+                  </div>
+
+                  <div className="spotlight-card rounded-[22px] border border-[#141210]/10 bg-white p-4 sm:rounded-[24px] sm:p-5 dark:border-[#D8B07A]/15 dark:bg-[#151210]">
+                    <p className="text-xs font-medium text-[#73695E] dark:text-[#9D9488]">
+                      Jam Dapur
+                    </p>
+                    <p className="mt-1.5 font-display text-3xl font-semibold text-[#141210] whitespace-nowrap sm:mt-2 sm:text-4xl dark:text-[#E8C696]">
+                      <AnimatedNumber
+                        value={craftVisible ? 11 : 0}
+                        durationMs={900}
+                        format={(n) => `${Math.round(n)} Jam`}
+                      />
+                    </p>
+                    <p className="mt-1 text-xs text-[#574F46] dark:text-[#A9A093]">
+                      Sore hingga dini hari WIB
+                    </p>
+                  </div>
+
+                  <div className="spotlight-card rounded-[22px] border border-[#141210]/10 bg-white p-4 sm:rounded-[24px] sm:p-5 dark:border-[#D8B07A]/15 dark:bg-[#151210]">
+                    <p className="text-xs font-medium text-[#73695E] dark:text-[#9D9488]">
+                      Rata-rata Saji
+                    </p>
+                    <p className="mt-1.5 font-display text-3xl font-semibold text-[#141210] whitespace-nowrap sm:mt-2 sm:text-4xl dark:text-[#E8C696]">
+                      <AnimatedNumber
+                        value={craftVisible ? 7 : 0}
+                        durationMs={800}
+                        format={(n) => `~${Math.round(n)} mnt`}
+                      />
+                    </p>
+                    <p className="mt-1 text-xs text-[#574F46] dark:text-[#A9A093]">
+                      Hangat langsung dari wajan
+                    </p>
+                  </div>
+                </div>
+
+                {/* Viewport-triggered SVG Path Draw-In Craft Curve */}
+                <div className="spotlight-card rounded-[22px] border border-[#141210]/10 bg-white p-4 sm:rounded-[24px] sm:p-5 dark:border-[#D8B07A]/15 dark:bg-[#151210]">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold tracking-wider text-[#9A6B38] uppercase dark:text-[#D8B07A]">
+                        Kurva Karakter Wajan Besi
+                      </p>
+                      <p className="mt-0.5 text-xs text-[#574F46] dark:text-[#A9A093]">
+                        Tumis Rempah → Karamelisasi Kecap → Saji Nyemek Kental
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-[#141210] tabular-nums dark:text-[#E8C696]">
+                      215°C Puncak Api
+                    </span>
+                  </div>
+
+                  <svg
+                    viewBox="0 0 420 74"
+                    fill="none"
+                    aria-hidden="true"
+                    className="mt-4 h-16 w-full"
+                  >
+                    <defs>
+                      <linearGradient id="heatCurveGrad" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#9A6B38" />
+                        <stop offset="55%" stopColor="#D8B07A" />
+                        <stop offset="100%" stopColor="#F3DAB2" />
+                      </linearGradient>
+                    </defs>
+                    <line
+                      x1="0"
+                      y1="62"
+                      x2="420"
+                      y2="62"
+                      stroke="currentColor"
+                      strokeOpacity="0.12"
+                      strokeDasharray="3 4"
+                    />
+                    {craftVisible && (
+                      <path
+                        d="M 8 56 C 68 52, 92 22, 165 26 C 232 30, 265 10, 326 14 C 364 16, 392 30, 412 24"
+                        stroke="url(#heatCurveGrad)"
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                        pathLength={1}
+                        className="svg-draw-path"
+                      />
+                    )}
+                    <circle cx="165" cy="26" r="4" fill="#D8B07A" />
+                    <circle cx="326" cy="14" r="4.5" fill="#E8C696" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ============================================================
+            SECTION 5: PANORAMIC VISIT & WHATSAPP CONCIERGE (DUAL-THEME)
            ============================================================ */}
         <section
           id="lokasi"
-          className="relative overflow-hidden bg-[#0E221A] py-20 text-[#F8F4EC] sm:py-28"
+          className="scroll-mt-24 bg-[#F6F3EE] py-16 transition-colors duration-300 sm:py-24 dark:bg-[#0A0908]"
         >
-          <div className="absolute inset-0">
-            <img
-              src={EXPERIENCE_IMAGE}
-              alt="Suasana sore menuju malam di teras Warmindo Pakuwon's Sleman"
-              referrerPolicy="no-referrer"
-              className="h-full w-full object-cover object-center"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0E221A]/92 via-[#0E221A]/65 to-[#0E221A]/55" />
-          </div>
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <RevealBlock className="overflow-hidden rounded-[28px] border border-[#141210]/10 bg-white text-[#141210] shadow-[0_24px_60px_-24px_rgba(20,18,16,0.18)] sm:rounded-[32px] dark:border-[#D8B07A]/20 dark:bg-[#141210] dark:text-[#F7F3EC] dark:shadow-[0_28px_70px_-24px_rgba(0,0,0,0.55)]">
+              <div className="grid lg:grid-cols-12">
+                {/* Atmospheric Night Photo */}
+                <div className="relative min-h-[240px] overflow-hidden sm:min-h-[300px] lg:col-span-6 lg:min-h-[420px]">
+                  <img
+                    src={EXPERIENCE_IMAGE}
+                    alt="Suasana nongkrong malam di Warmindo Pakuwon's Sleman Yogyakarta"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white via-white/15 to-transparent lg:bg-gradient-to-r lg:from-transparent lg:to-white dark:from-[#141210] dark:via-[#141210]/20 dark:lg:from-transparent dark:lg:to-[#141210]" />
+                </div>
 
-          <div className="relative z-10 mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
-            <RevealBlock>
-              <p className="text-xs font-semibold tracking-[0.18em] text-[#E6BC7B]">
-                Kunjungi atau Pesan Langsung
-              </p>
-              <h2
-                className="mt-3 font-display text-3xl font-medium leading-tight text-[#F8F4EC] sm:text-5xl"
-                style={{ textWrap: 'balance' }}
-              >
-                Lebih dari Sekadar <em className="italic text-[#E6BC7B]">Warmindo</em>
-              </h2>
-              <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-[#F5EFE4]/88 sm:text-base">
-                Mampir bersama teman di kawasan Pakuwon Mall & Seturan, Depok, Sleman, atau
-                kirim pesanan Anda lebih dulu lewat WhatsApp agar hidangan siap hangat begitu Anda
-                tiba.
-              </p>
+                {/* Architectural Concierge Panel */}
+                <div className="flex min-w-0 flex-col justify-center p-6 sm:p-10 lg:col-span-6 lg:p-12">
+                  <p className="text-xs font-semibold tracking-[0.22em] text-[#9A6B38] uppercase dark:text-[#D8B07A]">
+                    Lokasi &amp; Layanan Chat WA
+                  </p>
+                  <h2 className="mt-2 font-display text-3xl leading-tight font-medium text-[#141210] sm:text-5xl dark:text-[#F7F3EC]">
+                    Singgah atau <span className="italic text-[#9A6B38] dark:text-[#D8B07A]">Pesan dari Kos</span>
+                  </h2>
+                  <p className="mt-3.5 text-sm leading-relaxed text-[#574F46] sm:mt-4 sm:text-base dark:text-[#CFC6B8]">
+                    Berlokasi strategis dekat Pakuwon Mall &amp; Seturan, Depok, Sleman. Pesan
+                    duluan lewat WhatsApp agar hidangan siap hangat tepat saat kamu tiba.
+                  </p>
 
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs font-medium text-[#E6BC7B] sm:text-sm">
-                <span>{STORE_INFO.address}</span>
-                <span aria-hidden="true">·</span>
-                <span>{STORE_INFO.hours}</span>
-              </div>
+                  <div className="mt-6 space-y-2.5 border-y border-[#141210]/10 py-5 text-sm text-[#574F46] dark:border-[#D8B07A]/16 dark:text-[#CFC6B8]">
+                    <p className="flex items-start gap-2.5">
+                      <MapPin
+                        className="mt-0.5 h-4 w-4 shrink-0 text-[#9A6B38] dark:text-[#D8B07A]"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {STORE_INFO.address}{' '}
+                        <span className="text-xs text-[#73695E] tabular-nums dark:text-[#9D9488]">
+                          ({STORE_INFO.coordinates})
+                        </span>
+                      </span>
+                    </p>
+                    <p className="flex items-center gap-2.5">
+                      <Clock className="h-4 w-4 shrink-0 text-[#9A6B38] dark:text-[#D8B07A]" aria-hidden="true" />
+                      <span>{STORE_INFO.hours}</span>
+                    </p>
+                  </div>
 
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
-                <a
-                  href={STORE_INFO.mapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-[48px] items-center gap-2 rounded-full bg-[#E6BC7B] px-6 py-3 text-sm font-semibold text-[#0E221A] transition-colors hover:bg-[#F0CC92] whitespace-nowrap"
-                >
-                  <MapPin className="h-4 w-4" aria-hidden="true" />
-                  <span>Petunjuk Arah Google Maps</span>
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </a>
+                  <div className="mt-6 flex flex-wrap items-center gap-3 sm:mt-7">
+                    <MagneticWrap strength={5}>
+                      <a
+                        href={STORE_INFO.mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="google-maps-link"
+                        className="inline-flex min-h-[46px] items-center gap-2 rounded-full bg-[#141210] px-5 py-2.5 text-sm font-semibold text-[#F7F3EC] hover:bg-[#2A2520] whitespace-nowrap sm:min-h-[48px] sm:px-6 dark:bg-[#D8B07A] dark:text-[#0A0908] dark:hover:bg-[#E8C696]"
+                      >
+                        <MapPin className="h-4 w-4" aria-hidden="true" />
+                        <span>Buka Google Maps</span>
+                        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                      </a>
+                    </MagneticWrap>
 
-                <button
-                  type="button"
-                  onClick={() => setCartOpen(true)}
-                  className="inline-flex min-h-[48px] items-center gap-2 rounded-full border border-[#F5EFE4]/35 bg-[#0E221A]/65 px-6 py-3 text-sm font-semibold text-[#F8F4EC] transition-colors hover:border-[#E6BC7B] hover:text-[#E6BC7B] whitespace-nowrap cursor-pointer"
-                >
-                  <MessageCircle className="h-4 w-4 text-[#E6BC7B]" aria-hidden="true" />
-                  <span>Buka Keranjang WA</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setCartOpen(true)}
+                      className="inline-flex min-h-[46px] items-center gap-2 rounded-full border border-[#141210]/18 px-5 py-2.5 text-sm font-semibold text-[#141210] hover:border-[#141210] hover:bg-[#ECE6DC] whitespace-nowrap cursor-pointer sm:min-h-[48px] sm:px-6 dark:border-[#D8B07A]/34 dark:text-[#F7F3EC] dark:hover:border-[#D8B07A] dark:hover:bg-[#1E1A16] dark:hover:text-[#E8C696]"
+                    >
+                      <MessageCircle className="h-4 w-4 text-[#9A6B38] dark:text-[#D8B07A]" aria-hidden="true" />
+                      <span>Buka Keranjang WA</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </RevealBlock>
           </div>
         </section>
-      </main>
 
-      {/* ============================================================
-          7. FOOTER (Deep Forest Emerald, matching reference)
-         ============================================================ */}
-      <footer className="relative overflow-hidden border-t border-[#E6BC7B]/15 bg-[#0B1B14] pt-14 pb-24 text-[#F5EFE4] sm:pb-14">
-        <GoldLeafOrnament className="pointer-events-none absolute -bottom-8 -left-8 h-48 w-48 text-[#E6BC7B]/18" />
-
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-10 md:grid-cols-12">
-            {/* Brand */}
-            <div className="md:col-span-5">
-              <div className="flex items-center gap-2.5">
-                <BrandEmblem className="h-8 w-8" />
-                <span className="font-display text-2xl font-semibold text-[#F8F4EC]">
+        {/* ============================================================
+            MINIMAL LUXURY FOOTER (EXTRA BOTTOM SAFE-PADDING FOR STICKY CART)
+           ============================================================ */}
+        <footer className="border-t border-[#141210]/10 bg-[#ECE6DC] pt-12 pb-24 text-[#574F46] sm:pb-16 dark:border-[#D8B07A]/14 dark:bg-[#080706] dark:text-[#9D9488]">
+          <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-6 px-4 sm:px-6 md:flex-row md:items-center md:gap-8 lg:px-8">
+            <div className="flex items-center gap-3">
+              <BrandEmblem className="h-9 w-9 shrink-0" />
+              <div>
+                <p className="font-display text-2xl font-semibold text-[#141210] dark:text-[#F7F3EC]">
                   {STORE_INFO.name}
-                </span>
+                </p>
+                <p className="text-xs">{STORE_INFO.address}</p>
               </div>
-              <p className="mt-3 max-w-sm text-sm leading-relaxed text-[#F5EFE4]/72">
-                {STORE_INFO.tagline} Hidangan hangat dimasak dadakan dengan pemesanan praktis
-                langsung melalui WhatsApp.
-              </p>
             </div>
 
-            {/* Quick Links */}
-            <div className="md:col-span-3">
-              <h3 className="font-sans text-xs font-semibold tracking-[0.14em] text-[#E6BC7B]">
-                Navigasi
-              </h3>
-              <ul className="mt-3.5 space-y-2.5 text-sm text-[#F5EFE4]/78">
-                <li>
-                  <a href="#beranda" className="hover:text-[#E6BC7B] transition-colors">
-                    Beranda
-                  </a>
-                </li>
-                <li>
-                  <a href="#menu" className="hover:text-[#E6BC7B] transition-colors">
-                    Katalog Menu
-                  </a>
-                </li>
-                <li>
-                  <a href="#studio-3d" className="hover:text-[#E6BC7B] transition-colors">
-                    Studio Hidangan 3D
-                  </a>
-                </li>
-                <li>
-                  <a href="#cerita" className="hover:text-[#E6BC7B] transition-colors">
-                    Cerita Kami
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            {/* Contact & Maps */}
-            <div className="md:col-span-4">
-              <h3 className="font-sans text-xs font-semibold tracking-[0.14em] text-[#E6BC7B]">
-                Lokasi & Layanan
-              </h3>
-              <ul className="mt-3.5 space-y-2.5 text-sm text-[#F5EFE4]/78">
-                <li className="flex items-start gap-2.5">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#E6BC7B]" aria-hidden="true" />
-                  <span>{STORE_INFO.address}</span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-[#E6BC7B]" aria-hidden="true" />
-                  <span>{STORE_INFO.hours}</span>
-                </li>
-                <li>
-                  <a
-                    href={STORE_INFO.mapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 font-medium text-[#E6BC7B] hover:underline"
-                  >
-                    <span>Lihat Titik Google Maps</span>
-                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  </a>
-                </li>
-              </ul>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => scrollToSection('studio-3d')}
+                className="hover:text-[#141210] cursor-pointer dark:hover:text-[#D8B07A]"
+              >
+                Studio 3D
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('menu')}
+                className="hover:text-[#141210] cursor-pointer dark:hover:text-[#D8B07A]"
+              >
+                Katalog Menu
+              </button>
+              <a
+                href={STORE_INFO.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-[#141210] dark:hover:text-[#D8B07A]"
+              >
+                Google Maps
+              </a>
+              <span className="tabular-nums">© 2026 {STORE_INFO.name}</span>
             </div>
           </div>
+        </footer>
 
-          <div className="mt-10 flex flex-col items-start justify-between gap-3 border-t border-[#F5EFE4]/10 pt-6 text-xs text-[#F5EFE4]/55 sm:flex-row sm:items-center">
-            <p>© {new Date().getFullYear()} {STORE_INFO.name}. Seluruh hak cipta dilindungi.</p>
-            <p className="tabular-nums">Koordinat {STORE_INFO.coordinates} · Sleman, DIY</p>
-          </div>
-        </div>
-      </footer>
-
-      {/* ============================================================
-          MOBILE-FIRST COMPACT STICKY CART BAR (<= 8% viewport height)
-         ============================================================ */}
-      <AnimatePresence>
-        {totalItems > 0 && !cartOpen && (
-          <motion.div
-            initial={{ y: 90, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 90, opacity: 0 }}
-            transition={{ duration: 0.28, ease: LUXURY_EASE }}
-            className="fixed right-3 bottom-3 left-3 z-30 mx-auto max-w-xl md:right-6 md:bottom-5 md:left-auto md:w-auto"
-          >
-            <button
-              type="button"
-              onClick={() => setCartOpen(true)}
-              data-testid="floating-cart-bar"
-              className="flex h-[52px] w-full items-center justify-between gap-3 rounded-full border border-[#E6BC7B]/30 bg-[#0E221A] px-4 text-[#F8F4EC] shadow-[0_18px_40px_-10px_rgba(14,34,26,0.55)] transition-transform hover:scale-[1.01] active:scale-[0.99] cursor-pointer md:h-[58px] md:min-w-[320px] md:px-5"
+        {/* ============================================================
+            FLOATING STICKY CART BAR (DUAL-THEME)
+           ============================================================ */}
+        <AnimatePresence>
+          {totalItems > 0 && !cartOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 28, scale: 0.94 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 28, scale: 0.94 }}
+              transition={{ duration: 0.4, ease: SPRING_POP_EASE }}
+              className="fixed right-3 bottom-3 left-3 z-30 mx-auto max-w-md sm:right-6 sm:bottom-6 sm:left-auto sm:w-auto"
             >
-              <span className="flex items-center gap-2.5 sm:gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E6BC7B] text-[#0E221A] sm:h-9 sm:w-9">
-                  <ShoppingBag className="h-4 w-4" aria-hidden="true" />
-                </span>
-                <span className="text-left">
-                  <span className="block text-[11px] leading-tight text-[#E6BC7B] tabular-nums">
-                    {totalItems} item di keranjang
+              <button
+                type="button"
+                onClick={() => setCartOpen(true)}
+                data-testid="floating-cart-bar"
+                className="flex min-h-[54px] w-full items-center justify-between gap-4 rounded-full border border-[#141210]/14 bg-white px-4 py-2.5 text-[#141210] shadow-[0_20px_46px_-14px_rgba(20,18,16,0.28)] hover:bg-[#FAF8F4] cursor-pointer sm:min-h-[56px] sm:gap-5 sm:px-5 sm:py-3 dark:border-[#D8B07A]/40 dark:bg-[#141210] dark:text-[#F7F3EC] dark:shadow-[0_22px_50px_-14px_rgba(0,0,0,0.75)] dark:hover:bg-[#1F1B17]"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="inline-flex h-8 min-w-[32px] shrink-0 items-center justify-center rounded-full bg-[#141210] px-2 text-xs font-bold text-[#F7F3EC] tabular-nums dark:bg-[#D8B07A] dark:text-[#0A0908]">
+                    {totalItems}
                   </span>
-                  <span className="block text-sm font-bold leading-tight tabular-nums">
-                    {formatRupiah(subtotal)}
+                  <span className="min-w-0 text-left">
+                    <span className="block truncate text-[11px] text-[#73695E] dark:text-[#CFC6B8]">
+                      Pesanan WhatsApp
+                    </span>
+                    <span className="block text-sm font-bold text-[#141210] tabular-nums dark:text-[#E8C696]">
+                      <AnimatedNumber value={subtotal} durationMs={400} format={formatRupiah} />
+                    </span>
                   </span>
                 </span>
-              </span>
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#141210] px-4 py-2 text-xs font-semibold text-[#F7F3EC] whitespace-nowrap dark:bg-[#D8B07A] dark:text-[#0A0908]">
+                  <ShoppingBag className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Checkout</span>
+                </span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E6BC7B] px-3.5 py-1.5 text-xs font-bold text-[#0E221A] whitespace-nowrap sm:px-4 sm:py-2">
-                <span>Pesan WA</span>
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              </span>
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Non-blocking subtle feedback toast */}
-      <AnimatePresence>
-        {addedBanner && !cartOpen && (
-          <motion.div
-            role="status"
-            aria-live="polite"
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.2 }}
-            className="fixed top-20 right-4 z-40 flex items-center gap-3 rounded-full border border-[#E6BC7B]/35 bg-[#0E221A] px-4 py-2.5 text-xs font-medium text-[#F8F4EC] shadow-lg sm:right-6"
-          >
-            <span>{addedBanner}</span>
-            <button
-              type="button"
-              onClick={() => {
-                setAddedBanner(null);
-                setCartOpen(true);
-              }}
-              className="font-bold text-[#E6BC7B] underline cursor-pointer"
+        {/* ============================================================
+            FLOATING PILL SPRING TOAST WITH UNDO (DUAL-THEME & NON-OVERLAPPING)
+           ============================================================ */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              key={toast.id}
+              role="status"
+              aria-live="polite"
+              data-testid="motion-pill-toast"
+              initial={{ opacity: 0, y: 24, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 18, scale: 0.92 }}
+              transition={{ duration: 0.4, ease: SPRING_POP_EASE }}
+              className="fixed bottom-[86px] left-1/2 z-50 flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-center gap-2.5 rounded-full border border-[#141210]/14 bg-white px-4 py-2.5 text-xs font-semibold text-[#141210] shadow-[0_18px_42px_-12px_rgba(20,18,16,0.28)] sm:bottom-8 sm:gap-3 dark:border-[#D8B07A]/35 dark:bg-[#141210] dark:text-[#F7F3EC] dark:shadow-[0_18px_42px_-12px_rgba(0,0,0,0.72)]"
             >
-              Lihat
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <span className="truncate">{toast.message}</span>
+              {toast.undoSnapshot && (
+                <button
+                  type="button"
+                  onClick={handleUndoToast}
+                  data-testid="toast-undo-button"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#ECE6DC] px-3 py-1 text-[11px] font-bold text-[#141210] hover:bg-[#141210] hover:text-[#F7F3EC] whitespace-nowrap cursor-pointer dark:bg-[#D8B07A]/20 dark:text-[#E8C696] dark:hover:bg-[#D8B07A] dark:hover:text-[#0A0908]"
+                >
+                  <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                  <span>Urungkan</span>
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Product Customization Modal */}
-      <ProductModal
-        product={customizingProduct}
-        defaultSpice={preferredSpice}
-        onClose={() => setCustomizingProduct(null)}
-        onConfirmAdd={handleConfirmCustomAdd}
-      />
+        {/* ============================================================
+            SPRING BACK-TO-TOP FLOATING BUTTON (DUAL-THEME)
+           ============================================================ */}
+        <AnimatePresence>
+          {showBackToTop && !cartOpen && (
+            <motion.button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              initial={{ opacity: 0, scale: 0.72, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.72, y: 16 }}
+              transition={{ duration: 0.34, ease: SPRING_POP_EASE }}
+              aria-label="Kembali ke atas"
+              className={`fixed right-3 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#141210]/16 bg-white text-[#141210] shadow-lg hover:bg-[#141210] hover:text-[#F7F3EC] cursor-pointer sm:right-6 dark:border-[#D8B07A]/35 dark:bg-[#141210] dark:text-[#E8C696] dark:hover:bg-[#D8B07A] dark:hover:text-[#0A0908] ${
+                totalItems > 0 ? 'bottom-[88px] sm:bottom-24' : 'bottom-5 sm:bottom-6'
+              }`}
+            >
+              <ArrowUp className="h-4 w-4" aria-hidden="true" />
+            </motion.button>
+          )}
+        </AnimatePresence>
 
-      {/* WhatsApp Cart & Checkout Drawer */}
-      <CartDrawer
-        open={cartOpen}
-        items={cart}
-        form={checkoutForm}
-        onFormChange={setCheckoutForm}
-        onUpdateQty={(key, delta) => setCart((prev) => updateCartItemQuantity(prev, key, delta))}
-        onRemoveItem={(key) => setCart((prev) => removeCartItem(prev, key))}
-        onClearCart={() => setCart([])}
-        onClose={() => setCartOpen(false)}
-      />
-    </div>
+        {/* Product Customization Modal */}
+        <ProductModal
+          product={customizingProduct}
+          defaultSpice={defaultSpice}
+          onClose={() => setCustomizingProduct(null)}
+          onConfirmAdd={handleConfirmCustomAdd}
+        />
+
+        {/* WhatsApp Cart & Checkout Drawer */}
+        <CartDrawer
+          open={cartOpen}
+          items={cart}
+          form={checkoutForm}
+          onFormChange={setCheckoutForm}
+          onUpdateQty={handleUpdateQty}
+          onRemoveItem={handleRemoveItem}
+          onClearCart={handleClearCart}
+          onClose={() => setCartOpen(false)}
+        />
+      </div>
+    </MotionConfig>
   );
 }

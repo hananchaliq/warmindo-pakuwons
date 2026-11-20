@@ -11,6 +11,7 @@ import {
   detectSoftwareWebGL,
   scheduleAfterDraw,
 } from './webglUtils';
+import { SlidingPillNav } from '../components/SlidingPillNav';
 
 export type DishModelId = 'nyemek' | 'magelangan' | 'kopi';
 type CameraPreset = 'hero' | 'top' | 'detail';
@@ -591,11 +592,11 @@ export function CulinaryShowcase3D({ activeDish }: CulinaryShowcase3DProps) {
     controls.dampingFactor = 0.06;
     controls.autoRotate = false;
 
-    // 3-point warm/cool culinary studio lighting
-    const hemiLight = new THREE.HemisphereLight('#A9D1C3', '#23160D', 0.85);
+    // 3-point warm obsidian/champagne culinary studio lighting
+    const hemiLight = new THREE.HemisphereLight('#E4D5C0', '#1E150F', 0.9);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight('#FFE5BC', 2.2);
+    const keyLight = new THREE.DirectionalLight('#FFE7C4', 2.25);
     keyLight.position.set(3.5, 6.2, 4.0);
     keyLight.castShadow = !isSoftwareGl;
     keyLight.shadow.mapSize.width = 1024;
@@ -610,7 +611,7 @@ export function CulinaryShowcase3D({ activeDish }: CulinaryShowcase3DProps) {
     keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
 
-    const rimLight = new THREE.DirectionalLight('#E6BC7B', 1.1);
+    const rimLight = new THREE.DirectionalLight('#D8B07A', 1.25);
     rimLight.position.set(-4.2, 3.0, -3.5);
     scene.add(rimLight);
 
@@ -882,9 +883,15 @@ export function CulinaryShowcase3D({ activeDish }: CulinaryShowcase3DProps) {
     };
   }, []);
 
+  const cameraNavItems = (Object.keys(CAMERA_PRESETS) as CameraPreset[]).map((presetKey) => ({
+    id: presetKey,
+    label: CAMERA_PRESETS[presetKey].label,
+    icon: <Eye className="hidden h-3.5 w-3.5 sm:inline-block" aria-hidden="true" />,
+  }));
+
   if (webglUnavailable) {
     return (
-      <div className="flex h-[360px] w-full items-center justify-center rounded-2xl border border-[#E6BC7B]/20 bg-[#132920] p-6 text-center text-sm text-[#F5EFE4]/80 sm:h-[440px]">
+      <div className="flex h-[320px] w-full items-center justify-center rounded-[28px] border border-[#141210]/12 bg-[#ECE6DC] p-6 text-center text-sm text-[#574F46] sm:h-[440px] dark:border-[#D8B07A]/20 dark:bg-[#141210] dark:text-[#F7F3EC]/80">
         Pratinjau 3D tidak tersedia pada perangkat ini. Silakan lihat foto menu lengkap di katalog bawah.
       </div>
     );
@@ -892,7 +899,7 @@ export function CulinaryShowcase3D({ activeDish }: CulinaryShowcase3DProps) {
 
   return (
     <div
-      className="relative h-[360px] w-full overflow-hidden rounded-2xl border border-[#E6BC7B]/20 bg-[radial-gradient(circle_at_50%_40%,#1F4334_0%,#0E221A_72%)] sm:h-[440px] lg:h-[480px]"
+      className="relative h-[340px] w-full overflow-hidden rounded-[26px] border border-[#141210]/12 bg-[radial-gradient(circle_at_50%_38%,#FAF7F2_0%,#E6DDD0_78%)] shadow-[0_22px_52px_-22px_rgba(20,18,16,0.22)] sm:h-[440px] sm:rounded-[28px] lg:h-[500px] dark:border-[#D8B07A]/22 dark:bg-[radial-gradient(circle_at_50%_38%,#241D17_0%,#0C0A08_74%)] dark:shadow-[0_28px_64px_-22px_rgba(0,0,0,0.82)]"
       data-testid="culinary-3d-stage"
       data-active-dish={activeDish}
     >
@@ -900,45 +907,36 @@ export function CulinaryShowcase3D({ activeDish }: CulinaryShowcase3DProps) {
       <div ref={mountRef} className="h-full w-full" />
 
       {/* Subtle interaction hint top-right (no backdrop-filter over WebGL) */}
-      <div className="pointer-events-none absolute top-4 right-4 rounded-full border border-[#E6BC7B]/25 bg-[#0E221A]/90 px-3 py-1 text-xs font-medium text-[#E6BC7B]">
+      <div className="pointer-events-none absolute top-3 right-3 rounded-full border border-[#141210]/12 bg-white/94 px-3 py-1 text-[11px] font-semibold text-[#141210] shadow-sm sm:top-4 sm:right-4 sm:px-3.5 sm:text-xs dark:border-[#D8B07A]/26 dark:bg-[#110E0C]/92 dark:text-[#E8C696]">
         Geser 360° untuk inspeksi
       </div>
 
-      {/* Unified compact bottom camera control dock (no backdrop-filter over WebGL) */}
-      <div className="absolute right-3 bottom-3 left-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E6BC7B]/20 bg-[#0E221A]/92 px-3 py-2 sm:right-4 sm:bottom-4 sm:left-4">
-        <div className="flex items-center gap-1" role="group" aria-label="Sudut kamera 3D">
-          {(Object.keys(CAMERA_PRESETS) as CameraPreset[]).map((presetKey) => {
-            const active = cameraPreset === presetKey;
-            return (
-              <button
-                key={presetKey}
-                type="button"
-                onClick={() => setCameraPreset(presetKey)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  active
-                    ? 'bg-[#E6BC7B] text-[#0E221A]'
-                    : 'text-[#F5EFE4]/80 hover:bg-[#1B392C] hover:text-[#F5EFE4]'
-                }`}
-              >
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>{CAMERA_PRESETS[presetKey].label}</span>
-              </button>
-            );
-          })}
+      {/* Unified responsive bottom camera control dock (no backdrop-filter over WebGL) */}
+      <div className="absolute right-2.5 bottom-2.5 left-2.5 flex flex-col items-stretch gap-2 rounded-[20px] border border-[#141210]/12 bg-white/95 p-2 shadow-sm sm:right-4 sm:bottom-4 sm:left-4 sm:flex-row sm:items-center sm:justify-between sm:rounded-full sm:px-2.5 sm:py-1.5 dark:border-[#D8B07A]/22 dark:bg-[#110E0C]/94">
+        <div className="w-full sm:w-auto">
+          <SlidingPillNav
+            items={cameraNavItems}
+            activeId={cameraPreset}
+            onSelect={(preset) => setCameraPreset(preset)}
+            ariaLabel="Sudut kamera 3D"
+            variant="compact-surface"
+            fullWidth
+            testId="camera-preset-pill-nav"
+          />
         </div>
 
         <button
           type="button"
           onClick={() => setAutoSpin((prev) => !prev)}
           aria-pressed={autoSpin}
-          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+          className={`inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer ${
             autoSpin
-              ? 'border-[#E6BC7B]/40 bg-[#1B392C] text-[#E6BC7B]'
-              : 'border-white/15 text-[#F5EFE4]/70 hover:text-[#F5EFE4]'
+              ? 'border-[#141210]/20 bg-[#ECE6DC] text-[#141210] dark:border-[#D8B07A]/45 dark:bg-[#241D16] dark:text-[#E8C696]'
+              : 'border-[#141210]/12 bg-[#FAF8F4] text-[#574F46] hover:text-[#141210] dark:border-white/15 dark:bg-[#161310] dark:text-[#CFC6B8] dark:hover:text-[#F7F3EC]'
           }`}
         >
           {autoSpin ? (
-            <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <RotateCw className="h-3.5 w-3.5 animate-[spin_5s_linear_infinite]" aria-hidden="true" />
           ) : (
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
           )}

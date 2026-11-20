@@ -6,8 +6,21 @@ import {
   scheduleAfterDraw,
 } from './webglUtils';
 
-export function HeroEmberCanvas() {
+import type { ThemeMode } from '../utils/motionCraft';
+
+interface HeroEmberCanvasProps {
+  theme?: ThemeMode;
+}
+
+export function HeroEmberCanvas({ theme = 'dark' }: HeroEmberCanvasProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const themeRef = useRef<ThemeMode>(theme);
+  const applyThemeRef = useRef<(mode: ThemeMode) => void>(() => {});
+
+  useEffect(() => {
+    themeRef.current = theme;
+    applyThemeRef.current(theme);
+  }, [theme]);
 
   useEffect(() => {
     const container = mountRef.current;
@@ -71,19 +84,20 @@ export function HeroEmberCanvas() {
     particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
     const particleTexture = createGlowParticleTexture();
+    const isLightInit = themeRef.current === 'light';
     const particleMat = new THREE.PointsMaterial({
-      size: 0.28,
+      size: 0.3,
       map: particleTexture,
       transparent: true,
-      opacity: 0.72,
+      opacity: isLightInit ? 0.38 : 0.78,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      color: new THREE.Color('#F2CE8E'),
+      blending: isLightInit ? THREE.NormalBlending : THREE.AdditiveBlending,
+      color: new THREE.Color(isLightInit ? '#B57F3F' : '#E8C696'),
     });
     const embers = new THREE.Points(particleGeo, particleMat);
     scene.add(embers);
 
-    // Subtle golden aroma silk ribbon
+    // Subtle champagne bronze aroma silk ribbon
     const ribbonPoints: THREE.Vector3[] = [];
     for (let i = 0; i <= 24; i++) {
       const t = i / 24;
@@ -98,21 +112,34 @@ export function HeroEmberCanvas() {
     const ribbonCurve = new THREE.CatmullRomCurve3(ribbonPoints);
     const ribbonGeo = new THREE.TubeGeometry(ribbonCurve, 48, 0.018, 6, false);
     const ribbonMat = new THREE.MeshBasicMaterial({
-      color: '#E6BC7B',
+      color: isLightInit ? '#9A6B38' : '#D8B07A',
       transparent: true,
-      opacity: 0.22,
+      opacity: isLightInit ? 0.16 : 0.24,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: isLightInit ? THREE.NormalBlending : THREE.AdditiveBlending,
     });
     const ribbonMesh = new THREE.Mesh(ribbonGeo, ribbonMat);
     scene.add(ribbonMesh);
 
-    // Second fine ribbon
+    // Second fine bronze ribbon
     const ribbonMesh2 = ribbonMesh.clone();
     ribbonMesh2.position.set(0.6, 1.2, -0.8);
     ribbonMesh2.rotation.z = 0.08;
     ribbonMesh2.scale.set(0.95, 0.7, 1);
     scene.add(ribbonMesh2);
+
+    applyThemeRef.current = (mode: ThemeMode) => {
+      const isLight = mode === 'light';
+      particleMat.color.set(isLight ? '#B57F3F' : '#E8C696');
+      particleMat.opacity = isLight ? 0.38 : 0.78;
+      particleMat.blending = isLight ? THREE.NormalBlending : THREE.AdditiveBlending;
+      particleMat.needsUpdate = true;
+
+      ribbonMat.color.set(isLight ? '#9A6B38' : '#D8B07A');
+      ribbonMat.opacity = isLight ? 0.16 : 0.24;
+      ribbonMat.blending = isLight ? THREE.NormalBlending : THREE.AdditiveBlending;
+      ribbonMat.needsUpdate = true;
+    };
 
     const pointerTarget = { x: 0, y: 0 };
     const pointerCurrent = { x: 0, y: 0 };

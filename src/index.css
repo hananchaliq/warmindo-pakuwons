@@ -1,46 +1,262 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-serif: "Playfair Display", Georgia, Cambria, "Times New Roman", serif;
-  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: "Cormorant Garamond", Georgia, Cambria, "Times New Roman", serif;
+  --font-sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
-  --color-emerald-deep: #0E221A;
-  --color-emerald-surface: #152E24;
-  --color-emerald-muted: #1E3D30;
-  --color-ivory: #F5EFE4;
-  --color-ivory-soft: #FAF7F0;
-  --color-ivory-sand: #E9DEC9;
-  --color-gold: #E6BC7B;
-  --color-gold-deep: #C59143;
-  --color-ink: #14241C;
-  --color-ink-muted: #515F56;
+  --color-obsidian: #0A0908;
+  --color-obsidian-surface: #141210;
+  --color-obsidian-elevated: #1C1916;
+  --color-alabaster: #F6F3EE;
+  --color-alabaster-card: #FFFFFF;
+  --color-alabaster-stone: #ECE6DC;
+  --color-bronze: #D8B07A;
+  --color-bronze-bright: #E8C696;
+  --color-bronze-deep: #9A6B38;
+  --color-ink-light: #F7F3EC;
+  --color-ink-dark: #141210;
+  --color-stone-muted: #9D9488;
+}
+
+:root {
+  --ease-spring-pop: cubic-bezier(0.3, 1.5, 0.5, 1);
+  --ease-nav-pill: cubic-bezier(0.3, 1.25, 0.4, 1);
+  --ease-card-lift: cubic-bezier(0.3, 1.4, 0.5, 1);
+  --ease-fluid: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-reveal: cubic-bezier(0.6, 0, 0.2, 1);
+
+  --floor-glow: rgba(154, 107, 56, 0.12);
+  --spotlight-color: rgba(154, 107, 56, 0.14);
+}
+
+.dark {
+  --floor-glow: rgba(216, 176, 122, 0.14);
+  --spotlight-color: rgba(216, 176, 122, 0.15);
 }
 
 @layer base {
   html {
     font-family: var(--font-sans);
-    background-color: var(--color-ivory);
-    color: var(--color-ink);
+    background-color: #F6F3EE;
+    color: #141210;
+  }
+
+  html.dark {
+    background-color: #0A0908;
+    color: #F7F3EC;
+  }
+
+  body {
+    background-image:
+      radial-gradient(85% 42% at 50% 106%, var(--floor-glow), transparent 72%),
+      radial-gradient(50% 30% at 85% 0%, rgba(216, 176, 122, 0.06), transparent 65%);
+    background-attachment: fixed;
   }
 
   h1, h2, h3, .font-display {
     font-family: var(--font-serif);
+    letter-spacing: -0.015em;
   }
+
+  /* Tactile spring active scale on interactive buttons */
+  button {
+    transition:
+      transform 0.2s var(--ease-spring-pop),
+      background-color 0.28s ease,
+      border-color 0.28s ease,
+      color 0.28s ease,
+      box-shadow 0.28s ease;
+  }
+
+  button:active:not(:disabled) {
+    transform: scale(0.93);
+  }
+}
+
+/* Circular Reveal View Transitions API */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+}
+
+/* Sliding Pill Nav Indicator */
+.nav-pill-indicator {
+  will-change: left, width;
+  transition:
+    left 0.55s var(--ease-nav-pill),
+    width 0.55s var(--ease-nav-pill),
+    opacity 0.22s ease;
+}
+
+/* Pointer-Tracking Radial Spotlight */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.35s var(--ease-card-lift),
+    box-shadow 0.35s var(--ease-fluid),
+    border-color 0.3s ease;
+}
+
+.spotlight-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    280px circle at var(--mx, 50%) var(--my, -60%),
+    var(--spotlight-color),
+    transparent 62%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.spotlight-card:hover {
+  transform: translateY(-4px);
+}
+
+.spotlight-card:hover::after {
+  opacity: 1;
+}
+
+/* Subtle 3D Pointer Tilt + Radial Spotlight Card */
+.tilt-spotlight-card {
+  position: relative;
+  overflow: hidden;
+  transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(0px);
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition:
+    transform 0.28s var(--ease-fluid),
+    box-shadow 0.35s var(--ease-fluid),
+    border-color 0.3s ease;
+}
+
+.tilt-spotlight-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    320px circle at var(--mx, 50%) var(--my, -60%),
+    var(--spotlight-color),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 0.32s ease;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tilt-spotlight-card:hover {
+  transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-5px);
+}
+
+.tilt-spotlight-card:hover::after {
+  opacity: 1;
+}
+
+/* Blur-Out & Staggered Blur-In Catalog Morph */
+.morph-container {
+  transition:
+    opacity 0.22s ease,
+    filter 0.22s ease,
+    transform 0.22s ease;
+}
+
+.morph-container.morph-out {
+  opacity: 0;
+  filter: blur(12px);
+  transform: scale(0.985);
+}
+
+@keyframes blurIn {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0) scale(1);
+  }
+}
+
+.stagger-blur-item {
+  animation: blurIn 0.65s var(--ease-fluid) backwards;
+  animation-delay: calc(var(--i, 0) * 38ms);
+}
+
+/* Editorial Infinite Culinary Marquee Ribbon */
+@keyframes atelierMarquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: atelierMarquee 34s linear infinite;
+  will-change: transform;
+}
+
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* SVG Path Draw-In & Progress Fill */
+@keyframes drawPath {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.svg-draw-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: drawPath 1.25s var(--ease-fluid) forwards;
+}
+
+@keyframes fillBar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.progress-fill-bar {
+  transform-origin: left center;
+  animation: fillBar 1s var(--ease-fluid) backwards;
+  animation-delay: calc(var(--i, 0) * 90ms);
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 
-/* Editorial arch silhouette echoing reference */
-.arch-frame {
-  border-top-left-radius: 9999px;
-  border-top-right-radius: 9999px;
-  border-bottom-left-radius: 0.75rem;
-  border-bottom-right-radius: 0.75rem;
-}
-
-/* Subtle horizontal scrollbar hiding for mobile category tabs */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -49,8 +265,20 @@
   scrollbar-width: none;
 }
 
+/* Mandatory Accessibility Guardrail */
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  .marquee-track {
+    animation: none !important;
+  }
+
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+    transition: none !important;
   }
 }
