@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Navbar Liquid Glass iOS</title>
+<style>
+:root{--ink:#fff;--shadow:rgba(20,10,60,.35);color-scheme:dark}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100%;background:#1b1140;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Inter,system-ui,sans-serif;color:var(--ink)}
+.bg{position:fixed;inset:0;z-index:0}
+.bg svg{width:100%;height:100%;display:block}
+.blob{animation:drift 14s ease-in-out infinite alternate}
+.blob.b{animation-duration:19s;animation-delay:-6s}
+@keyframes drift{to{transform:translate(120px,-70px)}}
+main{position:relative;z-index:1;max-width:560px;margin:0 auto;padding:max(48px,env(safe-area-inset-top)) 20px 200px}
+h1{font-size:44px;line-height:1.05;letter-spacing:-.03em;font-weight:800;text-shadow:0 2px 24px var(--shadow)}
+.lead{margin:12px 0 28px;font-size:17px;line-height:1.45;opacity:.92;max-width:42ch;text-shadow:0 1px 12px var(--shadow)}
+.card{margin-bottom:18px;padding:22px;border-radius:26px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2)}
+.card h2{font-size:22px;letter-spacing:-.02em;margin-bottom:6px}
+.card p{font-size:15px;line-height:1.5;opacity:.88}
+.card.hot{background:linear-gradient(135deg,#ff5f6d,#ffc371);color:#2a0a1a}
+.card.cool{background:linear-gradient(135deg,#00c6ff,#5b5bff)}
+.card.lime{background:linear-gradient(135deg,#d4fc79,#96e6a1);color:#0b2a14}
+
+/* ===== LIQUID GLASS ===== */
+.dock{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:10;touch-action:none;user-select:none;-webkit-user-select:none}
+.bar{position:relative;display:flex;gap:0;padding:6px;border-radius:999px;
+  background:rgba(255,255,255,.10);
+  backdrop-filter:blur(14px) saturate(190%) brightness(1.08);
+  -webkit-backdrop-filter:blur(14px) saturate(190%) brightness(1.08);
+  box-shadow:
+    0 12px 40px rgba(10,5,40,.28),
+    0 2px 8px rgba(10,5,40,.18),
+    inset 0 1px 1px rgba(255,255,255,.65),
+    inset 0 -1px 1px rgba(255,255,255,.25),
+    inset 1.5px 0 2px rgba(255,255,255,.3),
+    inset -1.5px 0 2px rgba(255,255,255,.3),
+    inset 0 0 22px rgba(255,255,255,.12)}
+.bar::before,.bar::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;padding:1.5px;
+  background:linear-gradient(var(--ang,135deg),rgba(255,255,255,0) 0%,rgba(255,255,255,var(--lo,.14)) var(--p1,33%),rgba(255,255,255,var(--hi,.5)) var(--p2,66%),rgba(255,255,255,0) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.bar::before{mix-blend-mode:screen}
+.bar::after{mix-blend-mode:overlay}
+.glow{position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .25s;mix-blend-mode:overlay;
+  background:radial-gradient(circle at var(--gx,50%) var(--gy,50%),rgba(255,255,255,.7),rgba(255,255,255,0) 55%)}
+.bar:hover .glow{opacity:.55}
+.bar.down .glow{opacity:1}
+.pill{position:absolute;left:0;top:6px;bottom:6px;border-radius:999px;pointer-events:none;will-change:transform;
+  background:rgba(255,255,255,.26);
+  backdrop-filter:blur(3px) saturate(200%) brightness(1.25);
+  -webkit-backdrop-filter:blur(3px) saturate(200%) brightness(1.25);
+  box-shadow:
+    0 6px 22px rgba(10,5,40,.22),
+    inset 0 1.5px 1px rgba(255,255,255,.9),
+    inset 0 -1.5px 1px rgba(255,255,255,.4),
+    inset 0 0 18px rgba(255,255,255,.25);
+  transition:background .25s,box-shadow .25s}
+.pill::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(120% 90% at 30% 0%,rgba(255,255,255,.55),rgba(255,255,255,0) 55%)}
+.pill.press{background:rgba(255,255,255,.12);box-shadow:0 14px 34px rgba(10,5,40,.3),inset 0 2px 2px rgba(255,255,255,1),inset 0 -2px 2px rgba(255,255,255,.55),inset 0 0 26px rgba(255,255,255,.35)}
+.tab{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:76px;height:58px;
+  border:0;background:none;color:rgba(255,255,255,.88);font:600 11px/1 inherit;font-family:inherit;letter-spacing:.01em;cursor:pointer;
+  text-shadow:0 1px 6px rgba(10,5,40,.35);transition:color .25s,transform .25s}
+.tab svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 4px rgba(10,5,40,.3));transition:transform .35s cubic-bezier(.3,1.6,.5,1)}
+.tab.on{color:#fff}
+.tab.on svg{transform:scale(1.08)}
+.tab:focus-visible{outline:2px solid #fff;outline-offset:-4px;border-radius:999px}
+svg.defs{position:absolute;width:0;height:0;overflow:hidden}
+@media (max-width:400px){.tab{width:66px}}
+@media (prefers-reduced-motion:reduce){.blob{animation:none}}
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+<svg viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1a78"/><stop offset=".38" stop-color="#8a2fb8"/>
+      <stop offset=".62" stop-color="#ff5e8a"/><stop offset=".8" stop-color="#ffb35c"/><stop offset="1" stop-color="#ffe29a"/>
+    </linearGradient>
+    <radialGradient id="sun" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#fffbe6"/><stop offset=".55" stop-color="#ffd36a"/><stop offset="1" stop-color="#ff9a4a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="m1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a2a9a"/><stop offset="1" stop-color="#2b1360"/></linearGradient>
+    <linearGradient id="m2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f1a74"/><stop offset="1" stop-color="#150a3a"/></linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#sky)"/>
+  <g opacity=".9" fill="#fff"><circle cx="140" cy="90" r="2.2"/><circle cx="360" cy="150" r="1.6"/><circle cx="620" cy="60" r="2"/><circle cx="880" cy="130" r="1.8"/><circle cx="1090" cy="70" r="2.4"/><circle cx="500" cy="210" r="1.4"/><circle cx="980" cy="240" r="1.5"/></g>
+  <circle cx="600" cy="560" r="230" fill="url(#sun)"/>
+  <circle cx="600" cy="560" r="105" fill="#fff4cf"/>
+  <circle class="blob" cx="230" cy="420" r="150" fill="#00d5ff" opacity=".55"/>
+  <circle class="blob b" cx="980" cy="360" r="170" fill="#7cff6b" opacity=".45"/>
+  <path d="M0 640 L170 470 L300 590 L470 410 L640 600 L800 450 L980 610 L1200 480 L1200 900 L0 900Z" fill="url(#m1)"/>
+  <path d="M0 740 L150 620 L330 720 L520 590 L720 730 L910 620 L1200 740 L1200 900 L0 900Z" fill="url(#m2)"/>
+  <g font-family="Helvetica Neue,Arial,sans-serif" font-weight="800" fill="#fff" opacity=".9">
+    <text x="60" y="800" font-size="120" letter-spacing="-4">LIQUID GLASS</text>
+    <text x="60" y="880" font-size="60" opacity=".55">refraksi · blur · kilau tepi</text>
+  </g>
+</svg>
+</div>
+
+<main>
+  <h1>Liquid glass, seperti di iOS.</h1>
+  <p class="lead">Dekatkan kursor ke navbar bawah, lalu tekan dan geser pil kaca. Gulir halaman ini juga: konten di belakang navbar ikut terbiaskan.</p>
+  <section class="card hot"><h2>Beranda</h2><p>Kartu berwarna ini memperlihatkan bagaimana kaca membiaskan dan menjenuhkan warna di belakangnya.</p></section>
+  <section class="card cool"><h2>Pencarian</h2><p>Pil indikator melebar saat bergerak dan membesar saat ditekan, seperti tab bar iOS 26.</p></section>
+  <section class="card lime"><h2>Koleksi</h2><p>Tepi kaca punya kilau terang di sudut kiri atas dan kanan bawah.</p></section>
+  <section class="card"><h2>Pesan</h2><p>Di Chrome dan Edge, pinggiran kaca juga membelokkan gambar di belakangnya (refraksi sungguhan). Di Safari dan Firefox tampil sebagai kaca buram.</p></section>
+  <section class="card hot"><h2>Profil</h2><p>Gulir terus untuk melihat konten melewati bagian bawah navbar.</p></section>
+</main>
+
+<svg class="defs" aria-hidden="true" id="defs"><defs></defs></svg>
+
+<nav class="dock" aria-label="Navigasi utama">
+  <div class="bar" id="bar">
+    <span class="glow"></span>
+    <div class="pill" id="pill"></div>
+    <button class="tab on" data-i="0"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Beranda</button>
+    <button class="tab" data-i="1"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>Cari</button>
+    <button class="tab" data-i="2"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M9 4v5.5"/></svg>Koleksi</button>
+    <button class="tab" data-i="3"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-11.7 7.1L4 20l1-4A8 8 0 1 1 20 12z"/></svg>Pesan</button>
+    <button class="tab" data-i="4"><svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.7"/><path d="M4.5 20c.8-3.6 3.8-5.5 7.5-5.5s6.7 1.9 7.5 5.5"/></svg>Profil</button>
+  </div>
+</nav>
+
+<script>
+(function(){
+  var bar=document.getElementById('bar'),pill=document.getElementById('pill'),
+      tabs=[].slice.call(bar.querySelectorAll('.tab')),defs=document.querySelector('#defs defs');
+  var chromium=/Chrome|Chromium|Edg/.test(navigator.userAgent)&&!/Firefox/.test(navigator.userAgent);
+
+  /* --- refraksi tepi via SVG displacement map (Chromium) --- */
+  var NS='http://www.w3.org/2000/svg';
+  /* peta refraksi: SDF rounded-rect, tepi membelok seperti lensa cembung (R=geser x, G=geser y) */
+  function sdfMap(w,h,bezel){
+    var c=document.createElement('canvas');c.width=w;c.height=h;
+    var g=c.getContext('2d'),im=g.createImageData(w,h),d=im.data,r=h/2,hw=w/2,hh=h/2;
+    for(var y=0;y<h;y++)for(var x=0;x<w;x++){
+      var px=x+.5-hw,py=y+.5-hh,qx=Math.abs(px)-(hw-r),qy=Math.abs(py)-(hh-r),
+          ox=Math.max(qx,0),oy=Math.max(qy,0),len=Math.hypot(ox,oy),nx,ny;
+      var depth=-(len+Math.min(Math.max(qx,qy),0)-r);
+      if(len>0){nx=ox/len*Math.sign(px);ny=oy/len*Math.sign(py)}
+      else if(qx>qy){nx=Math.sign(px);ny=0}else{nx=0;ny=Math.sign(py)}
+      var t=Math.max(0,Math.min(1,1-depth/bezel)),f=1-Math.sqrt(1-t*t),i=(y*w+x)*4;
+      d[i]=128+nx*f*127;d[i+1]=128+ny*f*127;d[i+2]=128;d[i+3]=255;
+    }
+    g.putImageData(im,0,0);return c.toDataURL();
+  }
+  /* tiga kanal RGB digeser dengan skala berbeda = aberasi kromatik, lalu digabung (screen) */
+  function glassFilter(el,id,bezel,scale,ab,tail){
+    if(!chromium)return;
+    var w=Math.round(el.offsetWidth),h=Math.round(el.offsetHeight);
+    var old=document.getElementById(id);if(old)old.remove();
+    var f=document.createElementNS(NS,'filter');
+    f.id=id;f.setAttribute('x','0');f.setAttribute('y','0');f.setAttribute('width','100%');f.setAttribute('height','100%');
+    f.setAttribute('color-interpolation-filters','sRGB');
+    var ch=function(n,s,m){return '<feDisplacementMap in="SourceGraphic" in2="map" scale="'+s+'" xChannelSelector="R" yChannelSelector="G" result="d'+n+'"/><feColorMatrix in="d'+n+'" type="matrix" values="'+m+'" result="c'+n+'"/>'};
+    f.innerHTML='<feImage href="'+sdfMap(w,h,bezel)+'" x="0" y="0" width="'+w+'" height="'+h+'" preserveAspectRatio="none" result="map"/>'+
+      ch('r',-scale,'1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0')+
+      ch('g',-(scale+ab),'0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0')+
+      ch('b',-(scale+ab*2),'0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0')+
+      '<feBlend in="cr" in2="cg" mode="screen" result="rg"/><feBlend in="rg" in2="cb" mode="screen"/>';
+    defs.appendChild(f);
+    el.style.backdropFilter='url(#'+id+') '+tail;
+  }
+  function build(){
+    glassFilter(bar,'lg-bar',22,70,6,'blur(3px) saturate(180%) brightness(1.1)');
+    glassFilter(pill,'lg-pill',24,80,8,'blur(.5px) saturate(190%) brightness(1.2)');
+  }
+
+  /* --- geometri pil --- */
+  var cur=0,x=0,v=0,tx=0,w=0,pressed=false,press=1,pv=0,dragging=false,last=0,raf=0;
+  function tabLeft(i){return tabs[i].offsetLeft}
+  function layout(){
+    w=tabs[0].offsetWidth;pill.style.width=w+'px';
+    x=tx=tabLeft(cur);v=0;draw();build();
+  }
+  function draw(){
+    var st=Math.min(.4,Math.abs(v)/2200);
+    var sx=press*(1+st),sy=press*(1-st*.55);
+    pill.style.transform='translateX('+x+'px) scale('+sx+','+sy+')';
+  }
+  function nearest(c){
+    var best=0,bd=1e9;
+    tabs.forEach(function(t,i){var d=Math.abs(t.offsetLeft+t.offsetWidth/2-c);if(d<bd){bd=d;best=i}});
+    return best;
+  }
+  function select(i){
+    cur=i;tabs.forEach(function(t,j){t.classList.toggle('on',j===i);t.setAttribute('aria-current',j===i?'page':'false')});
+  }
+  function tick(t){
+    var dt=Math.min(.032,(t-last)/1000||.016);last=t;
+    /* pegas posisi */
+    var k=dragging?420:260,c=dragging?30:21;
+    v+=((tx-x)*k-v*c)*dt;x+=v*dt;
+    /* pegas skala tekan */
+    var target=pressed?1.2:1;
+    pv+=((target-press)*380-pv*20)*dt;press+=pv*dt;
+    draw();
+    if(Math.abs(tx-x)>.1||Math.abs(v)>.5||Math.abs(target-press)>.001||Math.abs(pv)>.01){raf=requestAnimationFrame(tick)}
+    else{x=tx;v=0;press=target;pv=0;draw();raf=0}
+  }
+  function go(){if(!raf){last=performance.now();raf=requestAnimationFrame(tick)}}
+
+  function localX(e){return e.clientX-bar.getBoundingClientRect().left}
+  function clampX(px){return Math.max(6,Math.min(bar.offsetWidth-6-w,px))}
+
+  bar.addEventListener('pointerdown',function(e){
+    bar.setPointerCapture(e.pointerId);
+    pressed=true;dragging=true;pill.classList.add('press');
+    tx=clampX(localX(e)-w/2);go();
+  });
+  bar.addEventListener('pointermove',function(e){
+    if(!dragging)return;
+    tx=clampX(localX(e)-w/2);go();
+  });
+  function end(e){
+    if(!dragging)return;
+    dragging=false;pressed=false;pill.classList.remove('press');
+    var i=nearest(tx+w/2);select(i);tx=tabLeft(i);go();
+  }
+  bar.addEventListener('pointerup',end);
+  bar.addEventListener('pointercancel',end);
+
+  /* keyboard */
+  tabs.forEach(function(t,i){
+    t.addEventListener('keydown',function(e){
+      var n=e.key==='ArrowRight'?i+1:e.key==='ArrowLeft'?i-1:null;
+      if(n===null||n<0||n>=tabs.length)return;
+      e.preventDefault();tabs[n].focus();select(n);tx=tabLeft(n);go();
+    });
+    t.addEventListener('click',function(e){
+      if(e.detail===0){select(i);tx=tabLeft(i);go()}
+    });
+  });
+
+  /* elastisitas + kilau tepi + cahaya mengikuti kursor (ala liquid-glass-react) */
+  var ELAST=.35,ZONE=200,P=['x','y','sx','sy','k'],cu={x:0,y:0,sx:1,sy:1,k:1},tg={x:0,y:0,sx:1,sy:1,k:1},eraf=0;
+  var dock=document.querySelector('.dock');
+  function etick(){
+    var d=0;
+    P.forEach(function(p){var df=tg[p]-cu[p];cu[p]+=df*.14;d+=Math.abs(df)});
+    bar.style.transform='translate('+cu.x+'px,'+cu.y+'px) scale('+(cu.sx*cu.k)+','+(cu.sy*cu.k)+')';
+    eraf=d>.002?requestAnimationFrame(etick):0;
+  }
+  function kick(){if(!eraf)eraf=requestAnimationFrame(etick)}
+  function cl(v,m){return Math.max(-m,Math.min(m,v))}
+  window.addEventListener('pointermove',function(e){
+    var r=dock.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2),
+        gap=Math.hypot(Math.max(0,Math.abs(dx)-r.width/2),Math.max(0,Math.abs(dy)-r.height/2)),
+        fade=gap>ZONE?0:1-gap/ZONE;
+    tg.x=dx*ELAST*.1*fade;tg.y=dy*ELAST*.1*fade;
+    tg.sx=1+Math.min(Math.abs(dx)/r.width,1)*ELAST*.35*fade;
+    tg.sy=1+Math.min(Math.abs(dy)/r.height,2)*ELAST*.15*fade;
+    var px=cl(dx/r.width*100,50),py=cl(dy/r.height*100,50),br=bar.getBoundingClientRect(),s=bar.style;
+    s.setProperty('--ang',(135+px*1.2)+'deg');
+    s.setProperty('--lo',(.12+Math.abs(px)*.008).toFixed(3));
+    s.setProperty('--hi',(.4+Math.abs(px)*.012).toFixed(3));
+    s.setProperty('--p1',Math.max(10,33+py*.3)+'%');
+    s.setProperty('--p2',Math.min(90,66+py*.4)+'%');
+    s.setProperty('--gx',((e.clientX-br.left)/br.width*100)+'%');
+    s.setProperty('--gy',((e.clientY-br.top)/br.height*100)+'%');
+    kick();
+  });
+  bar.addEventListener('pointerdown',function(){bar.classList.add('down');tg.k=.96;kick()});
+  function up(){bar.classList.remove('down');tg.k=1;kick()}
+  window.addEventListener('pointerup',up);
+  window.addEventListener('pointercancel',up);
+
+  window.addEventListener('resize',layout);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+  layout();
+})();
+</script>
+</body>
+</html>

@@ -1180,7 +1180,7 @@ export default function App() {
         {/* ============================================================
             MINIMAL LUXURY FOOTER (EXTRA BOTTOM SAFE-PADDING FOR STICKY CART)
            ============================================================ */}
-        <footer className="border-t border-[#141210]/10 bg-[#ECE6DC] pt-12 pb-24 text-[#574F46] sm:pb-16 dark:border-[#D8B07A]/14 dark:bg-[#080706] dark:text-[#9D9488]">
+        <footer className="border-t border-[#141210]/10 bg-[#ECE6DC] pt-12 pb-32 text-[#574F46] lg:pb-16 dark:border-[#D8B07A]/14 dark:bg-[#080706] dark:text-[#9D9488]">
           <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-6 px-4 sm:px-6 md:flex-row md:items-center md:gap-8 lg:px-8">
             <div className="flex items-center gap-3">
               <BrandEmblem className="h-9 w-9 shrink-0" />
@@ -1230,7 +1230,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 28, scale: 0.94 }}
               transition={{ duration: 0.4, ease: SPRING_POP_EASE }}
-              className="fixed right-3 bottom-3 left-3 z-30 mx-auto max-w-md sm:right-6 sm:bottom-6 sm:left-auto sm:w-auto"
+              className="fixed right-3 bottom-[98px] left-3 z-30 mx-auto max-w-md lg:right-6 lg:bottom-6 lg:left-auto lg:w-auto"
             >
               <button
                 type="button"
@@ -1274,7 +1274,9 @@ export default function App() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 18, scale: 0.92 }}
               transition={{ duration: 0.4, ease: SPRING_POP_EASE }}
-              className="fixed bottom-[86px] left-1/2 z-50 flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-center gap-2.5 rounded-full border border-[#141210]/14 bg-white px-4 py-2.5 text-xs font-semibold text-[#141210] shadow-[0_18px_42px_-12px_rgba(20,18,16,0.28)] sm:bottom-8 sm:gap-3 dark:border-[#D8B07A]/35 dark:bg-[#141210] dark:text-[#F7F3EC] dark:shadow-[0_18px_42px_-12px_rgba(0,0,0,0.72)]"
+              className={`fixed left-1/2 z-50 flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-center gap-2.5 rounded-full border border-[#141210]/14 bg-white px-4 py-2.5 text-xs font-semibold text-[#141210] shadow-[0_18px_42px_-12px_rgba(20,18,16,0.28)] sm:gap-3 lg:bottom-8 dark:border-[#D8B07A]/35 dark:bg-[#141210] dark:text-[#F7F3EC] dark:shadow-[0_18px_42px_-12px_rgba(0,0,0,0.72)] ${
+                totalItems > 0 ? 'bottom-[166px]' : 'bottom-[100px]'
+              }`}
             >
               <span className="truncate">{toast.message}</span>
               {toast.undoSnapshot && (
@@ -1305,8 +1307,8 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.72, y: 16 }}
               transition={{ duration: 0.34, ease: SPRING_POP_EASE }}
               aria-label="Kembali ke atas"
-              className={`fixed right-3 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#141210]/16 bg-white text-[#141210] shadow-lg hover:bg-[#141210] hover:text-[#F7F3EC] cursor-pointer sm:right-6 dark:border-[#D8B07A]/35 dark:bg-[#141210] dark:text-[#E8C696] dark:hover:bg-[#D8B07A] dark:hover:text-[#0A0908] ${
-                totalItems > 0 ? 'bottom-[88px] sm:bottom-24' : 'bottom-5 sm:bottom-6'
+              className={`fixed right-3 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#141210]/16 bg-white text-[#141210] shadow-lg hover:bg-[#141210] hover:text-[#F7F3EC] cursor-pointer lg:right-6 dark:border-[#D8B07A]/35 dark:bg-[#141210] dark:text-[#E8C696] dark:hover:bg-[#D8B07A] dark:hover:text-[#0A0908] ${
+                totalItems > 0 ? 'bottom-[166px] lg:bottom-24' : 'bottom-[100px] lg:bottom-6'
               }`}
             >
               <ArrowUp className="h-4 w-4" aria-hidden="true" />

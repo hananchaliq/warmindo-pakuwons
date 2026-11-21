@@ -51,7 +51,6 @@
     background-image:
       radial-gradient(85% 42% at 50% 106%, var(--floor-glow), transparent 72%),
       radial-gradient(50% 30% at 85% 0%, rgba(216, 176, 122, 0.06), transparent 65%);
-    background-attachment: fixed;
   }
 
   h1, h2, h3, .font-display {
@@ -69,7 +68,7 @@
       box-shadow 0.28s ease;
   }
 
-  button:active:not(:disabled) {
+  button:active:not(:disabled):not([data-no-active-scale]) {
     transform: scale(0.93);
   }
 }
@@ -96,6 +95,277 @@
     left 0.55s var(--ease-nav-pill),
     width 0.55s var(--ease-nav-pill),
     opacity 0.22s ease;
+}
+
+/* =====================================================================
+   APPLE iOS 26 LIQUID GLASS NAVBAR (DUAL-THEME: LIGHT + DARK)
+   Faithful to Navbar_Liquid_Glass_iOS reference physics & optics
+   ===================================================================== */
+.lg-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.lg-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-radius: 999px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform;
+
+  /* Light Mode crystal liquid glass */
+  background: rgba(255, 255, 255, 0.38);
+  backdrop-filter: blur(14px) saturate(195%) brightness(1.05);
+  -webkit-backdrop-filter: blur(14px) saturate(195%) brightness(1.05);
+  box-shadow:
+    0 12px 36px rgba(20, 16, 12, 0.14),
+    0 2px 8px rgba(20, 16, 12, 0.08),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.96),
+    inset 0 -1px 1px rgba(20, 16, 12, 0.12),
+    inset 1.5px 0 2px rgba(255, 255, 255, 0.72),
+    inset -1.5px 0 2px rgba(255, 255, 255, 0.72),
+    inset 0 0 22px rgba(255, 255, 255, 0.34);
+}
+
+.dark .lg-bar {
+  /* Dark Mode crystal liquid glass (exact reference optics) */
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(14px) saturate(190%) brightness(1.08);
+  -webkit-backdrop-filter: blur(14px) saturate(190%) brightness(1.08);
+  box-shadow:
+    0 12px 40px rgba(10, 5, 24, 0.36),
+    0 2px 8px rgba(10, 5, 24, 0.22),
+    inset 0 1px 1px rgba(255, 255, 255, 0.65),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.25),
+    inset 1.5px 0 2px rgba(255, 255, 255, 0.3),
+    inset -1.5px 0 2px rgba(255, 255, 255, 0.3),
+    inset 0 0 22px rgba(255, 255, 255, 0.12);
+}
+
+.lg-bar::before,
+.lg-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1.5px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* Light Mode dynamic specular rim */
+.lg-bar::before {
+  background: linear-gradient(
+    var(--ang, 135deg),
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.95) var(--p1, 33%),
+    rgba(255, 255, 255, 1) var(--p2, 66%),
+    rgba(255, 255, 255, 0.2) 100%
+  );
+  mix-blend-mode: screen;
+}
+
+.lg-bar::after {
+  background: linear-gradient(
+    var(--ang, 135deg),
+    rgba(20, 16, 12, 0.04) 0%,
+    rgba(20, 16, 12, 0.14) var(--p1, 33%),
+    rgba(255, 255, 255, 0.85) var(--p2, 66%),
+    rgba(20, 16, 12, 0.08) 100%
+  );
+  mix-blend-mode: normal;
+}
+
+/* Dark Mode dynamic specular rim (screen + overlay) */
+.dark .lg-bar::before,
+.dark .lg-bar::after {
+  background: linear-gradient(
+    var(--ang, 135deg),
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, var(--lo, 0.14)) var(--p1, 33%),
+    rgba(255, 255, 255, var(--hi, 0.5)) var(--p2, 66%),
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+.dark .lg-bar::before {
+  mix-blend-mode: screen;
+}
+
+.dark .lg-bar::after {
+  mix-blend-mode: overlay;
+}
+
+.lg-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+  mix-blend-mode: soft-light;
+  background: radial-gradient(
+    circle at var(--gx, 50%) var(--gy, 50%),
+    rgba(255, 255, 255, 0.92),
+    rgba(255, 255, 255, 0) 58%
+  );
+}
+
+.dark .lg-glow {
+  mix-blend-mode: overlay;
+  background: radial-gradient(
+    circle at var(--gx, 50%) var(--gy, 50%),
+    rgba(255, 255, 255, 0.7),
+    rgba(255, 255, 255, 0) 55%
+  );
+}
+
+.lg-bar:hover .lg-glow {
+  opacity: 0.55;
+}
+
+.lg-bar.down .lg-glow {
+  opacity: 1;
+}
+
+/* Inner Sliding Liquid Glass Droplet Pill */
+.lg-pill {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  border-radius: 999px;
+  pointer-events: none;
+  will-change: transform;
+  background: rgba(255, 255, 255, 0.54);
+  backdrop-filter: blur(3px) saturate(200%) brightness(1.08);
+  -webkit-backdrop-filter: blur(3px) saturate(200%) brightness(1.08);
+  box-shadow:
+    0 6px 20px rgba(20, 16, 12, 0.14),
+    inset 0 1.5px 1px rgba(255, 255, 255, 1),
+    inset 0 -1.5px 1px rgba(20, 16, 12, 0.12),
+    inset 0 0 18px rgba(255, 255, 255, 0.5);
+  transition:
+    background 0.25s,
+    box-shadow 0.25s;
+}
+
+.dark .lg-pill {
+  background: rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(3px) saturate(200%) brightness(1.25);
+  -webkit-backdrop-filter: blur(3px) saturate(200%) brightness(1.25);
+  box-shadow:
+    0 6px 22px rgba(10, 5, 24, 0.24),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.9),
+    inset 0 -1.5px 1px rgba(255, 255, 255, 0.4),
+    inset 0 0 18px rgba(255, 255, 255, 0.25);
+}
+
+.lg-pill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    120% 90% at 30% 0%,
+    rgba(255, 255, 255, 0.8),
+    rgba(255, 255, 255, 0) 58%
+  );
+}
+
+.dark .lg-pill::after {
+  background: radial-gradient(
+    120% 90% at 30% 0%,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0) 55%
+  );
+}
+
+/* Crystal-clear expanded droplet state when clicked / held / scrubbed */
+.lg-pill.press {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 14px 32px rgba(20, 16, 12, 0.22),
+    inset 0 2px 2px rgba(255, 255, 255, 1),
+    inset 0 -2px 2px rgba(20, 16, 12, 0.16),
+    inset 0 0 26px rgba(255, 255, 255, 0.45);
+}
+
+.dark .lg-pill.press {
+  background: rgba(255, 255, 255, 0.11);
+  box-shadow:
+    0 14px 34px rgba(10, 5, 24, 0.34),
+    inset 0 2px 2px rgba(255, 255, 255, 1),
+    inset 0 -2px 2px rgba(255, 255, 255, 0.55),
+    inset 0 0 26px rgba(255, 255, 255, 0.35);
+}
+
+.lg-tab {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  background: none;
+  color: rgba(20, 18, 16, 0.72);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  text-shadow: 0 1px 6px rgba(255, 255, 255, 0.7);
+  transition:
+    color 0.25s,
+    transform 0.25s;
+}
+
+.dark .lg-tab {
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 6px rgba(10, 5, 20, 0.42);
+}
+
+.lg-tab svg {
+  transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1);
+  filter: drop-shadow(0 1px 4px rgba(255, 255, 255, 0.45));
+}
+
+.dark .lg-tab svg {
+  filter: drop-shadow(0 1px 4px rgba(10, 5, 24, 0.35));
+}
+
+.lg-tab.on {
+  color: #141210;
+}
+
+.dark .lg-tab.on {
+  color: #ffffff;
+}
+
+.lg-tab.on svg {
+  transform: scale(1.08);
+}
+
+.lg-tab:focus-visible {
+  outline: 2px solid #9a6b38;
+  outline-offset: -4px;
+  border-radius: 999px;
+}
+
+.dark .lg-tab:focus-visible {
+  outline: 2px solid #ffffff;
 }
 
 /* Pointer-Tracking Radial Spotlight */

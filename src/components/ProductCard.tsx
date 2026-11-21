@@ -212,33 +212,23 @@ export function ProductCard({
                 : 'bg-[#141210] text-[#F7F3EC] hover:bg-[#2A2520] dark:bg-[#D8B07A] dark:text-[#0A0908] dark:hover:bg-[#E8C696]'
             }`}
           >
-            <AnimatePresence mode="wait" initial={false}>
-              {justAdded ? (
-                <motion.span
-                  key="added"
-                  initial={{ scale: 0.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.6, opacity: 0 }}
-                  transition={{ duration: 0.22, ease: SPRING_POP_EASE }}
-                  className="inline-flex items-center gap-1"
-                >
-                  <Check className="h-4 w-4" aria-hidden="true" />
-                  <span>Masuk</span>
-                </motion.span>
-              ) : (
-                <motion.span
-                  key="add"
-                  initial={{ scale: 0.85, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.85, opacity: 0 }}
-                  transition={{ duration: 0.16 }}
-                  className="inline-flex items-center gap-1"
-                >
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  <span>Tambah</span>
-                </motion.span>
-              )}
-            </AnimatePresence>
+            {justAdded ? (
+              <motion.span
+                key="added"
+                initial={{ scale: 0.72, opacity: 0.6 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.22, ease: SPRING_POP_EASE }}
+                className="inline-flex items-center gap-1"
+              >
+                <Check className="h-4 w-4" aria-hidden="true" />
+                <span>Masuk</span>
+              </motion.span>
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span>Tambah</span>
+              </span>
+            )}
           </button>
         </div>
       </div>
